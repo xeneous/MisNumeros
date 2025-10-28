@@ -1,0 +1,116 @@
+Tabla,Campo,Tipo,PK,FK,Constraints,Descripción
+usuarios,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único del usuario
+usuarios,email,VARCHAR(100),,,NOT NULL UNIQUE,Email único para login
+usuarios,password_hash,VARCHAR(255),,,NOT NULL,Hash de contraseña
+usuarios,nombre,VARCHAR(50),,,NOT NULL,Nombre completo
+usuarios,alias,VARCHAR(30),,,,,Alias/nickname para mostrar
+usuarios,fecha_nacimiento,DATE,,,,Fecha de nacimiento
+usuarios,telefono,VARCHAR(20),,,,,Número de teléfono
+usuarios,foto_url,TEXT,,,,URL de foto de perfil
+usuarios,fecha_creacion,DATETIME,,,"NOT NULL DEFAULT CURRENT_TIMESTAMP",Cuándo se creó
+usuarios,fecha_actualizacion,DATETIME,,,"NOT NULL DEFAULT CURRENT_TIMESTAMP",Última actualización
+usuarios,activo,BOOLEAN,,,"NOT NULL DEFAULT 1",Usuario activo/inactivo
+usuarios,moneda_preferencia,VARCHAR(3),,,"NOT NULL DEFAULT 'ARS'","ARS USD EUR"
+cuentas,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único de cuenta
+cuentas,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+cuentas,nombre,VARCHAR(50),,,NOT NULL,Nombre de la cuenta
+cuentas,tipo,VARCHAR(20),,,NOT NULL,"bancaria digital efectivo"
+cuentas,numero_cuenta,VARCHAR(50),,,,,Número de cuenta/CVU/alias
+cuentas,banco_entidad,VARCHAR(50),,,,,Banco o entidad (Santander BBVA MP)
+cuentas,saldo_actual,DECIMAL(15,2),,,"NOT NULL DEFAULT 0.00",Saldo actual
+cuentas,moneda,VARCHAR(3),,,"NOT NULL DEFAULT 'ARS'",Moneda de la cuenta
+cuentas,color_hex,VARCHAR(7),,,"NOT NULL DEFAULT '#2196F3'",Color para UI
+cuentas,icono,VARCHAR(30),,,"NOT NULL DEFAULT 'credit_card'",Ícono para mostrar
+cuentas,fecha_creacion,DATETIME,,,"NOT NULL DEFAULT CURRENT_TIMESTAMP",Cuándo se creó
+cuentas,activa,BOOLEAN,,,"NOT NULL DEFAULT 1",Cuenta activa/inactiva
+cuentas,es_principal,BOOLEAN,,,"NOT NULL DEFAULT 0",Cuenta principal del usuario
+categorias,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+categorias,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+categorias,nombre,VARCHAR(50),,,NOT NULL,Nombre de categoría
+categorias,tipo,VARCHAR(10),,,NOT NULL,"ingreso gasto"
+categorias,color_hex,VARCHAR(7),,,"NOT NULL DEFAULT '#6B73FF'",Color para UI
+categorias,icono,VARCHAR(30),,,"NOT NULL DEFAULT 'category'",Ícono
+categorias,descripcion,TEXT,,,,Descripción opcional
+categorias,padre_id,INTEGER,,,"FK → categorias(id)",Categoría padre (jerarquía)
+categorias,fecha_creacion,DATETIME,,,"NOT NULL DEFAULT CURRENT_TIMESTAMP",Cuándo se creó
+categorias,activa,BOOLEAN,,,"NOT NULL DEFAULT 1",Activa/inactiva
+transacciones,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+transacciones,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+transacciones,cuenta_id,INTEGER,,TRUE,"NOT NULL FK → cuentas(id)",Cuenta afectada
+transacciones,categoria_id,INTEGER,,TRUE,"NOT NULL FK → categorias(id)",Categoría
+transacciones,tipo,VARCHAR(10),,,NOT NULL,"ingreso gasto transferencia"
+transacciones,monto,DECIMAL(15,2),,,NOT NULL,Cantidad
+transacciones,descripcion,TEXT,,,,Descripción del movimiento
+transacciones,fecha_transaccion,DATETIME,,,NOT NULL,Fecha y hora
+transacciones,fecha_registro,DATETIME,,,"NOT NULL DEFAULT CURRENT_TIMESTAMP",Cuándo se registró
+transacciones,metodo_pago,VARCHAR(20),,,,efectivo tarjeta transferencia
+transacciones,referencia,VARCHAR(100),,,,,Número de referencia
+transacciones,ubicacion,TEXT,,,,Lugar donde ocurrió
+transacciones,imagen_url,TEXT,,,,Foto de ticket/comprobante
+transacciones,notas,TEXT,,,,Notas adicionales
+transacciones,recurrente,BOOLEAN,,,"NOT NULL DEFAULT 0",Es movimiento recurrente
+gastos_fijos,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+gastos_fijos,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+gastos_fijos,cuenta_id,INTEGER,,TRUE,"NOT NULL FK → cuentas(id)",Cuenta a debitar
+gastos_fijos,categoria_id,INTEGER,,TRUE,"NOT NULL FK → categorias(id)",Categoría
+gastos_fijos,nombre,VARCHAR(100),,,NOT NULL,Nombre del gasto fijo
+gastos_fijos,descripcion,TEXT,,,,Descripción
+gastos_fijos,monto,DECIMAL(15,2),,,NOT NULL,Cantidad fija
+gastos_fijos,frecuencia,VARCHAR(10),,,NOT NULL,"mensual semanal anual"
+gastos_fijos,dia_semana,INTEGER,,,,Día de la semana (1-7)
+gastos_fijos,dia_mes,INTEGER,,,,Día del mes (1-31)
+gastos_fijos,fecha_inicio,DATE,,,NOT NULL,Fecha de inicio
+gastos_fijos,fecha_fin,DATE,,,,Fecha de fin (opcional)
+gastos_fijos,activo,BOOLEAN,,,"NOT NULL DEFAULT 1",Gasto activo
+gastos_fijos,recordatorio_dias,INTEGER,,,"DEFAULT 3",Días antes para recordar
+proximos_gastos,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+proximos_gastos,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+proximos_gastos,cuenta_id,INTEGER,,TRUE,"NOT NULL FK → cuentas(id)",Cuenta a usar
+proximos_gastos,categoria_id,INTEGER,,TRUE,"NOT NULL FK → categorias(id)",Categoría
+proximos_gastos,nombre,VARCHAR(100),,,NOT NULL,Nombre del gasto
+proximos_gastos,descripcion,TEXT,,,,Descripción
+proximos_gastos,monto_estimado,DECIMAL(15,2),,,NOT NULL,Cantidad estimada
+proximos_gastos,monto_real,DECIMAL(15,2),,,,,Cantidad real (cuando se pague)
+proximos_gastos,fecha_vencimiento,DATE,,,NOT NULL,Fecha límite
+proximos_gastos,fecha_pago,DATE,,,,Fecha cuando se pagó
+proximos_gastos,estado,VARCHAR(15),,,"NOT NULL DEFAULT 'pendiente'","pendiente pagado cancelado"
+proximos_gastos,prioridad,VARCHAR(10),,,"NOT NULL DEFAULT 'media'","baja media alta"
+proximos_gastos,recordatorio,BOOLEAN,,,"NOT NULL DEFAULT 1",Recordar o no
+presupuestos,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+presupuestos,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+presupuestos,categoria_id,INTEGER,,TRUE,"NOT NULL FK → categorias(id)",Categoría
+presupuestos,nombre,VARCHAR(50),,,NOT NULL,Nombre del presupuesto
+presupuestos,monto_limite,DECIMAL(15,2),,,NOT NULL,Límite mensual
+presupuestos,monto_gastado,DECIMAL(15,2),,,"NOT NULL DEFAULT 0.00",Gastado este mes
+presupuestos,mes,INTEGER,,,NOT NULL,Mes (1-12)
+presupuestos,anio,INTEGER,,,NOT NULL,Año
+presupuestos,alerta_porcentaje,INTEGER,,,"NOT NULL DEFAULT 80","% para alertar"
+contactos,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+contactos,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+contactos,nombre,VARCHAR(50),,,NOT NULL,Nombre del contacto
+contactos,email,VARCHAR(100),,,,,Email
+contactos,telefono,VARCHAR(20),,,,,Teléfono
+contactos,banco,VARCHAR(50),,,,,Banco/entidad
+contactos,cuenta_destino,VARCHAR(50),,,,,Cuenta/CVU/alias destino
+contactos,notas,TEXT,,,,Notas adicionales
+contactos,favorito,BOOLEAN,,,"NOT NULL DEFAULT 0",Contacto favorito
+objetivos_financieros,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+objetivos_financieros,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+objetivos_financieros,nombre,VARCHAR(100),,,NOT NULL,Nombre del objetivo
+objetivos_financieros,descripcion,TEXT,,,,Descripción
+objetivos_financieros,monto_objetivo,DECIMAL(15,2),,,NOT NULL,Cantidad a ahorrar
+objetivos_financieros,monto_actual,DECIMAL(15,2),,,"NOT NULL DEFAULT 0.00",Ahorrado hasta ahora
+objetivos_financieros,fecha_inicio,DATE,,,NOT NULL,Fecha de inicio
+objetivos_financieros,fecha_objetivo,DATE,,,NOT NULL,Fecha límite
+objetivos_financieros,categoria_id,INTEGER,,,"FK → categorias(id)",Categoría relacionada
+objetivos_financieros,prioridad,VARCHAR(10),,,"NOT NULL DEFAULT 'media'","baja media alta"
+objetivos_financieros,estado,VARCHAR(15),,,"NOT NULL DEFAULT 'activo'","activo pausado completado"
+recordatorios,id,INTEGER,TRUE,,PRIMARY KEY AUTOINCREMENT,ID único
+recordatorios,usuario_id,INTEGER,,TRUE,"NOT NULL FK → usuarios(id)",Propietario
+recordatorios,titulo,VARCHAR(100),,,NOT NULL,Título del recordatorio
+recordatorios,descripcion,TEXT,,,,Descripción
+recordatorios,fecha_recordatorio,DATETIME,,,NOT NULL,Cuándo recordar
+recordatorios,tipo,VARCHAR(20),,,NOT NULL,"gasto_fijo presupuesto objetivo"
+recordatorios,referencia_id,INTEGER,,,,ID del elemento relacionado
+recordatorios,frecuencia,VARCHAR(15),,,,unica diaria semanal mensual
+recordatorios,activo,BOOLEAN,,,"NOT NULL DEFAULT 1",Recordatorio activo

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "439049372849",
+    "project_id": "daybyday-5ef1a",
+    "storage_bucket": "daybyday-5ef1a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:439049372849:android:d9ef2ca1a6b28e30de8e90",
+        "android_client_info": {
+          "package_name": "com.example.posicion"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "439049372849-jvortpbj3qnfcunppikpqgh9nlsbune1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCwob8g-4Cuzo3F3Ih-9YBYPq-WS_S6Acs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "439049372849-jvortpbj3qnfcunppikpqgh9nlsbune1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

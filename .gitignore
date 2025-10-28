@@ -1,0 +1,50 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.idea
+.metadata
+.packages
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/ios/Pods/
+/ios/Flutter/App.framework
+/ios/Flutter/engine.version
+/ios/Flutter/flutter_export_environment.sh
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/info.plist
+/ios/Runner/GeneratedPluginRegistrant.*
+/ios/.symlinks/
+/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+/android/key.properties
+
+# Sensitive
+*.keystore
+*.jks
+
+# IDE specific
+*.iml
+*.vscode/
+
+# Web
+/web/
+
+# Windows
+/windows/
+
+# Linux
+/linux/
+
+# macOS
+/macos/

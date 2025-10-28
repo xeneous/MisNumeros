@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Firebase configuration -->
+    <string name="google_app_id" translatable="false">1:439049372849:android:d9ef2ca1a6b28e30de8e90</string>
+    <string name="google_api_key" translatable="false">AIzaSyCwob8g-4Cuzo3F3Ih-9YBYPq-WS_S6Acs</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyCwob8g-4Cuzo3F3Ih-9YBYPq-WS_S6Acs</string>
+    <string name="project_id" translatable="false">daybyday-5ef1a</string>
+    <string name="gcm_defaultSenderId" translatable="false">439049372849</string>
+    <string name="google_storage_bucket" translatable="false">daybyday-5ef1a.firebasestorage.app</string>
+    <string name="firebase_database_url" translatable="false">https://daybyday-5ef1a.firebaseio.com</string>
+</resources>
