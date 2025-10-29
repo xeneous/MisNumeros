@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../providers/auth_provider.dart';
 // import '../../models/user.dart'; // User model is now Usuario
-import '../../models/transaction.dart' as tx;
 // import '../../models/fixed_expense.dart'; // FixedExpense is now GastoFijo
 import '../../models/proximo_gasto.dart';
 import '../../models/account.dart';
 import '../../models/user.dart';
 import '../../models/gasto_fijo.dart';
-import '../../models/transaccion.dart'
-    as old_tx; // Import old Transaccion model
+import '../../models/transaccion.dart' as tx; // Import old Transaccion model
 import '../../services/database_service.dart';
 import '../accounts/add_edit_account_screen.dart';
+import '../accounts/accounts_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 
 // Extensiones auxiliares para manejo de fechas
@@ -44,10 +44,21 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Account> _accounts = [];
   List<ProximoGasto> _proximosGastos = [];
   Map<String, double> _accountBalances = {};
-  List<old_tx.Transaccion> _dailyTransactions =
-      []; // List for daily transactions
+  List<tx.Transaccion> _dailyTransactions = []; // List for daily transactions
   double _totalAvailableBalance = 0.0; // Sum of all account balances
   bool _isLoading = true;
+  double _dailyLimit = 0.0;
+
+  // State for quick transaction form
+  final _quickAddFormKey = GlobalKey<FormState>();
+  final _quickAddAmountController = TextEditingController();
+  final _quickAddDescriptionController = TextEditingController();
+  final _quickAddCategoryController = TextEditingController();
+  tx.TipoTransaccion? _quickAddTransactionType;
+  Account? _quickAddSelectedAccount;
+  bool _showExtraQuickAddFields = false;
+  bool _isSavingQuickTransaction = false;
+  final FocusNode _quickAddAmountFocus = FocusNode();
 
   int _currentPage = 0;
 
@@ -55,6 +66,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _quickAddAmountController.dispose();
+    _quickAddDescriptionController.dispose();
+    _quickAddCategoryController.dispose();
+    _quickAddAmountFocus.dispose();
+    super.dispose();
   }
 
   @override
@@ -87,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Calculate total available balance
       double totalBalance = 0.0;
       final balances = await _calculateBalances(accounts);
-      balances.forEach((key, value) => totalBalance += value);
+      totalBalance = balances.values.fold(0.0, (sum, balance) => sum + balance);
 
       // Fetch daily transactions
       final today = DateTime.now();
@@ -98,6 +118,9 @@ class _HomeScreenState extends State<HomeScreen> {
         fromDate: startOfDay,
         toDate: endOfDay,
       );
+
+      // Calculate daily limit
+      final dailyLimit = _calculateDailyLimit(totalBalance);
 
       // TODO: Implementar getProximosGastos en DatabaseService (still hardcoded for now)
       final proximosGastos = _getHardcodedProximosGastos();
@@ -113,6 +136,13 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoading = false;
           _dailyTransactions = dailyTransactions;
           _totalAvailableBalance = totalBalance;
+          _dailyLimit = dailyLimit;
+          // Set default account for quick add form if not already set, inside setState
+          if (accounts.isNotEmpty) {
+            _quickAddSelectedAccount =
+                accounts.where((acc) => acc.isDefault).firstOrNull ??
+                accounts.first;
+          }
         });
       }
     } catch (e) {
@@ -211,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 flex: 4,
                 child: _buildTitledAmountBox(
                   title: 'Límite Diario',
-                  amount: 0.0, // Placeholder
+                  amount: _dailyLimit,
                   color: Colors.grey[700]!,
                 ),
               ),
@@ -220,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 24),
           // Acciones rápidas fijas
-          _buildFixedQuickActions(),
+          _buildQuickTransactionForm(),
           const SizedBox(height: 24),
 
           // Próximos gastos - recuadro suave con tabla
@@ -229,6 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 20),
           const Divider(),
           _buildDailySummarySection(), // New daily summary section
+
           const SizedBox(height: 20),
           const Divider(),
           // Cuentas/Billeteras - carrusel
@@ -258,8 +289,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Center(
             child: Text(
               _showFinancialValues
-                  ? '\$${amount.toStringAsFixed(2)}'
-                  : '••••••••',
+                  ? _formatFinancialValue(amount)
+                  : '● ● ● ● ●',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -440,8 +471,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     _showFinancialValues
-                        ? '\$${gasto.importe.toStringAsFixed(2)}'
-                        : '••••••',
+                        ? _formatFinancialValue(gasto.importe)
+                        : '● ● ● ● ●',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -541,8 +572,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Text(
                 _showFinancialValues
-                    ? '\$${saldo.toStringAsFixed(2)}'
-                    : '••••••••',
+                    ? _formatFinancialValue(saldo)
+                    : '● ● ● ● ●',
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -615,7 +646,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       toDate: DateTime.now(),
     );
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -660,11 +690,11 @@ class _HomeScreenState extends State<HomeScreen> {
     double totalIngresos = 0;
     double totalEgresos = 0;
 
-    for (var tx in _dailyTransactions) {
-      if (tx.tipo == old_tx.TipoTransaccion.ingreso) {
-        totalIngresos += tx.monto;
+    for (var transaction in _dailyTransactions) {
+      if (transaction.tipo == tx.TipoTransaccion.ingreso) {
+        totalIngresos += transaction.monto;
       } else {
-        totalEgresos += tx.monto;
+        totalEgresos += transaction.monto;
       }
     }
 
@@ -701,9 +731,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        Text(label, style: TextStyle(fontSize: 12, color: color)),
         Text(
-          _showFinancialValues ? '\$${amount.toStringAsFixed(2)}' : '••••••',
+          _showFinancialValues ? _formatFinancialValue(amount) : '● ● ● ● ●',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -716,11 +746,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showDailyTransactionsDetail() {
     Map<String, double> subtotals = {};
-    for (var tx in _dailyTransactions) {
+    for (var transaction in _dailyTransactions) {
       subtotals.update(
-        tx.moneda,
-        (value) => value + (tx.signo * tx.monto),
-        ifAbsent: () => tx.signo * tx.monto,
+        transaction.moneda,
+        (value) => value + (transaction.signo * transaction.monto),
+        ifAbsent: () => transaction.signo * transaction.monto,
       );
     }
 
@@ -759,7 +789,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTransactionList(
-    List<old_tx.Transaccion> transactions,
+    List<tx.Transaccion> transactions,
     ScrollController controller,
   ) {
     return ListView.separated(
@@ -854,25 +884,177 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFixedQuickActions() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _buildQuickActionIcon(Icons.remove, 'Gasto', Colors.red, () {
-          _navigateToAddTransaction(tx.TransactionType.expense);
-        }),
-        _buildQuickActionIcon(Icons.add, 'Ingreso', Colors.green, () {
-          _navigateToAddTransaction(tx.TransactionType.income);
-        }),
-        _buildQuickActionIcon(
-          Icons.receipt_long,
-          'Gasto Fijo',
-          Colors.orange,
-          () {
-            Navigator.of(context).pushNamed('/fixed-expenses');
-          },
+  Widget _buildQuickTransactionForm() {
+    final isTypeSelected = _quickAddTransactionType != null;
+
+    return Form(
+      key: _quickAddFormKey,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
         ),
-      ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SegmentedButton<tx.TipoTransaccion>(
+              segments: const [
+                ButtonSegment(
+                  value: tx.TipoTransaccion.gasto,
+                  label: Text('Gasto'),
+                  icon: Icon(Icons.arrow_upward),
+                ),
+                ButtonSegment(
+                  value: tx.TipoTransaccion.ingreso,
+                  label: Text('Ingreso'),
+                  icon: Icon(Icons.arrow_downward),
+                ),
+              ],
+              emptySelectionAllowed: true,
+              selected: _quickAddTransactionType != null
+                  ? <tx.TipoTransaccion>{_quickAddTransactionType!}
+                  : {},
+              onSelectionChanged: (Set<tx.TipoTransaccion> newSelection) {
+                setState(() {
+                  _quickAddTransactionType = newSelection.isEmpty
+                      ? null
+                      : newSelection.first;
+                  // Clear amount field on type change
+                  _quickAddAmountController.clear();
+                  if (_quickAddTransactionType != null) {
+                    // Auto-focus amount field when a type is selected
+                    _quickAddAmountFocus.requestFocus();
+                  }
+                });
+              },
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor:
+                    _quickAddTransactionType == tx.TipoTransaccion.ingreso
+                    ? Colors.green.withOpacity(0.2)
+                    : Colors.red.withOpacity(0.2),
+                selectedForegroundColor:
+                    _quickAddTransactionType == tx.TipoTransaccion.ingreso
+                    ? Colors.green[800]
+                    : Colors.red[800],
+                foregroundColor: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    controller: _quickAddAmountController,
+                    focusNode: _quickAddAmountFocus,
+                    enabled: isTypeSelected,
+                    decoration: InputDecoration(
+                      labelText: 'Monto',
+                      prefixIcon: const Icon(Icons.attach_money),
+                      border: OutlineInputBorder(
+                        // Reduced height
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: (value) {
+                      if (!isTypeSelected) return null;
+                      if (value == null || value.isEmpty) {
+                        return 'Requerido';
+                      }
+                      if (double.tryParse(value) == null ||
+                          double.parse(value) <= 0) {
+                        return 'Inválido';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<Account>(
+                    value: _quickAddSelectedAccount,
+                    items: _accounts.map((cuenta) {
+                      return DropdownMenuItem<Account>(
+                        value: cuenta,
+                        child: Text(
+                          cuenta.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: isTypeSelected
+                        ? (Account? newValue) => setState(
+                            () => _quickAddSelectedAccount = newValue,
+                          )
+                        : null,
+                    decoration: InputDecoration(
+                      labelText: 'Cuenta',
+                      border: OutlineInputBorder(
+                        // Reduced height
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    validator: (value) =>
+                        isTypeSelected && value == null ? 'Requerida' : null,
+                  ),
+                ),
+              ],
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: _showExtraQuickAddFields
+                  ? _buildExtraQuickAddFields()
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  onPressed: !isTypeSelected
+                      ? null
+                      : () => setState(
+                          () => _showExtraQuickAddFields =
+                              !_showExtraQuickAddFields,
+                        ),
+                  child: Text(
+                    _showExtraQuickAddFields
+                        ? 'Menos opciones'
+                        : 'Más opciones...',
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: !isTypeSelected || _isSavingQuickTransaction
+                      ? null
+                      : _saveQuickTransaction,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _isSavingQuickTransaction
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Guardar'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -917,8 +1099,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDailyTransactionItem(old_tx.Transaccion transaction) {
-    final isIncome = transaction.tipo == old_tx.TipoTransaccion.ingreso;
+  Widget _buildDailyTransactionItem(tx.Transaccion transaction) {
+    final isIncome = transaction.tipo == tx.TipoTransaccion.ingreso;
     final icon = isIncome ? Icons.arrow_downward : Icons.arrow_upward;
     final color = isIncome ? Colors.green : Colors.red;
 
@@ -953,8 +1135,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Text(
             _showFinancialValues
-                ? '\$${transaction.monto.toStringAsFixed(2)}'
-                : '••••••',
+                ? _formatFinancialValue(transaction.monto)
+                : '● ● ● ● ●',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -966,14 +1148,119 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _navigateToAddTransaction(tx.TransactionType type) async {
-    // Navega a la pantalla de agregar transacción y espera a que se cierre.
-    // El `then` se ejecutará cuando se haga `pop` en la pantalla de transacción.
-    await Navigator.of(context)
-        .push(
-          MaterialPageRoute(builder: (context) => const AddTransactionScreen()),
-        )
-        .then((_) => _loadData());
+  Widget _buildExtraQuickAddFields() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0),
+      child: Column(
+        children: [
+          TextFormField(
+            controller: _quickAddDescriptionController,
+            decoration: InputDecoration(
+              labelText: 'Descripción (opcional)',
+              prefixIcon: const Icon(Icons.description),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            textCapitalization: TextCapitalization.sentences,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _quickAddCategoryController,
+            decoration: InputDecoration(
+              labelText: 'Categoría (opcional)',
+              prefixIcon: const Icon(Icons.category),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveQuickTransaction() async {
+    if (!_quickAddFormKey.currentState!.validate()) return;
+
+    setState(() => _isSavingQuickTransaction = true);
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final currentUser = authProvider.user;
+      if (currentUser == null) throw Exception("Usuario no autenticado");
+
+      final dbService = DatabaseService();
+      final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
+      if (oldUser == null) throw Exception("Usuario no encontrado en DB vieja");
+
+      final amount = double.parse(_quickAddAmountController.text);
+      final newTransaction = tx.Transaccion(
+        idTransaccion: const Uuid().v4(),
+        idUsuario: oldUser.idUsuario,
+        idCuenta: (await dbService.findOldAccountByName(
+          _quickAddSelectedAccount!.name,
+          oldUser.idUsuario,
+        )).first.idCuenta,
+        idCategoria:
+            1, // TODO: Implement category selection. Using default '1' for now.
+        tipo: _quickAddTransactionType!,
+        monto: amount,
+        descripcion: _quickAddDescriptionController.text.trim(),
+        fechaTransaccion: DateTime.now(),
+        fechaRegistro: DateTime.now(),
+        moneda: 'ARS',
+        tipoMovimiento: _quickAddTransactionType == tx.TipoTransaccion.ingreso
+            ? 1
+            : 2,
+        signo: _quickAddTransactionType == tx.TipoTransaccion.ingreso ? 1 : -1,
+      );
+
+      await dbService.insertTransaccion(newTransaction);
+
+      // --- BRIDGE ---
+      // After inserting the old transaction, update the balance on the new Account model
+      await dbService.updateAccountBalance(
+        _quickAddSelectedAccount!.id,
+        amount,
+        _quickAddTransactionType!,
+      );
+      // --- END BRIDGE ---
+
+      // Reset form and reload data
+      setState(() {
+        _quickAddAmountController.clear();
+        _quickAddDescriptionController.clear();
+        _quickAddCategoryController.clear();
+        _showExtraQuickAddFields = false;
+        _quickAddFormKey.currentState?.reset();
+      });
+      await _loadData(); // Reload all home screen data
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al guardar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingQuickTransaction = false);
+    }
+  }
+
+  void _showAddTransactionSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Permite que el sheet ocupe más pantalla
+      backgroundColor: Colors.transparent, // Para bordes redondeados
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.75, // Altura inicial
+        maxChildSize: 0.9, // Altura máxima al arrastrar
+        minChildSize: 0.5, // Altura mínima
+        builder: (_, controller) => const AddTransactionScreen(isSheet: true),
+      ),
+    ).then((_) => _loadData()); // Refresca los datos cuando se cierra
   }
 
   void _selectAccountForExpense(ProximoGasto gasto) {
@@ -1054,9 +1341,26 @@ class _HomeScreenState extends State<HomeScreen> {
   // Función para formatear valores financieros con opción de privacidad
   String _formatFinancialValue(double value) {
     if (!_showFinancialValues) {
-      return '••••••';
+      return '● ● ● ● ●';
     }
-    return '\$${value.toStringAsFixed(0)}';
+    final formatter = NumberFormat.currency(
+      locale: 'es_AR',
+      symbol: '\$',
+      decimalDigits: 2,
+    );
+    return formatter.format(value);
+  }
+
+  double _calculateDailyLimit(double totalBalance) {
+    if (totalBalance <= 0) return 0.0;
+
+    final now = DateTime.now();
+    final endOfMonth = DateTime(now.year, now.month + 1, 0);
+    final remainingDays = endOfMonth.day - now.day + 1;
+
+    if (remainingDays <= 0) return totalBalance;
+
+    return totalBalance / remainingDays;
   }
 
   // Función auxiliar para calcular gastos fijos del período actual
@@ -1300,9 +1604,13 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Cuentas'),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.of(
-                  context,
-                ).pushNamed('/accounts').then((_) => _loadData());
+                Navigator.of(context)
+                    .push(
+                      MaterialPageRoute(
+                        builder: (context) => const AccountsScreen(),
+                      ),
+                    )
+                    .then((_) => _loadData());
               },
             ),
             ListTile(
@@ -1607,7 +1915,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Navigate to add account screen and reload data on return
     Navigator.of(context)
-        .push(
+        .push<bool>(
           MaterialPageRoute<bool>(
             builder: (context) => AddEditAccountScreen(accountType: type),
           ),

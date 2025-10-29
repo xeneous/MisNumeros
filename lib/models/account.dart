@@ -1,3 +1,5 @@
+import 'package:equatable/equatable.dart';
+
 enum AccountType {
   cash('Efectivo'),
   debit('Debito'),
@@ -5,9 +7,22 @@ enum AccountType {
 
   const AccountType(this.displayName);
   final String displayName;
+
+  factory AccountType.fromName(String name) {
+    switch (name) {
+      case 'cash':
+        return AccountType.cash;
+      case 'debit':
+        return AccountType.debit;
+      case 'digital':
+        return AccountType.digital;
+      default:
+        return AccountType.cash; // Default value
+    }
+  }
 }
 
-class Account {
+class Account extends Equatable {
   final String id;
   final String userId;
   final String name;
@@ -120,4 +135,7 @@ class Account {
       updatedAt: DateTime.parse(map['updatedAt']),
     );
   }
+
+  @override
+  List<Object?> get props => [id];
 }

@@ -711,7 +711,7 @@ class DatabaseService {
       await updateAccountBalance(
         transaction.accountId!,
         transaction.amount,
-        transaction.type,
+        _mapNewToOldTransactionType(transaction.type),
       );
     }
 
@@ -721,15 +721,25 @@ class DatabaseService {
   Future<void> updateAccountBalance(
     String accountId,
     double amount,
-    new_tx.TransactionType type,
+    TipoTransaccion type,
   ) async {
     final account = await getAccount(accountId);
     if (account != null) {
-      final newBalance = type == new_tx.TransactionType.income
+      final newBalance = type == TipoTransaccion.ingreso
           ? (account.currentBalance + amount)
           : (account.currentBalance - amount);
       final updatedAccount = account.copyWith(currentBalance: newBalance);
       await updateAccount(updatedAccount);
+    }
+  }
+
+  // Helper to bridge new TransactionType to old TipoTransaccion
+  TipoTransaccion _mapNewToOldTransactionType(new_tx.TransactionType type) {
+    switch (type) {
+      case new_tx.TransactionType.income:
+        return TipoTransaccion.ingreso;
+      case new_tx.TransactionType.expense:
+        return TipoTransaccion.gasto;
     }
   }
 

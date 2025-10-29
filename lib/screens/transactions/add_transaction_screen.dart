@@ -10,7 +10,10 @@ import '../../services/database_service.dart';
 import '../../providers/auth_provider.dart';
 
 class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+  // Nuevo parámetro para saber si se muestra como una hoja modal
+  final bool isSheet;
+
+  const AddTransactionScreen({super.key, this.isSheet = false});
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -26,7 +29,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final _categoryController = TextEditingController();
 
   // Form state
-  tx.TransactionType _transactionType = tx.TransactionType.expense;
+  tx.TransactionType? _transactionType; // No se preselecciona nada
   DateTime _selectedDate = DateTime.now();
   Account? _selectedAccount;
   // Credit cards removed from new schema
@@ -120,220 +123,261 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final formContent = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _buildForm();
+
+    if (widget.isSheet) {
+      // Si es una hoja modal, se muestra con un diseño adaptado
+      return Container(
+        // Padding para que el contenido no se oculte detrás de la barra de estado/notch
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        // Usamos un Scaffold para que el resizeToAvoidBottomInset funcione correctamente
+        child: Scaffold(backgroundColor: Colors.transparent, body: formContent),
+      );
     }
 
+    // Si es una pantalla completa, se muestra con AppBar
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nueva Transacción'),
-        elevation: 0,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _saveTransaction,
-            child: _isSaving
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Guardar'),
-          ),
-        ],
-      ),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Transaction type selector (Income/Expense)
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildTypeButton(
-                        'Gasto',
-                        tx.TransactionType.expense,
-                        Icons.remove,
-                        Colors.red,
-                      ),
+      appBar: AppBar(title: const Text('Agregar Movimiento')),
+      body: formContent, // Scaffold aquí ya maneja el teclado
+    );
+  }
+
+  Widget _buildForm() {
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Título para la hoja modal
+              if (widget.isSheet) ...[
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildTypeButton(
-                        'Ingreso',
-                        tx.TransactionType.income,
-                        Icons.add,
-                        Colors.green,
-                      ),
-                    ),
-                  ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Center(
+                  child: Text(
+                    'Nuevo Movimiento',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                 ),
                 const SizedBox(height: 24),
-
-                // Row for Amount and Account
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextFormField(
-                        controller: _amountController,
-                        focusNode: _amountFocus,
-                        decoration: InputDecoration(
-                          labelText: 'Monto',
-                          hintText: '0.00',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          prefixIcon: const Icon(Icons.attach_money),
-                        ),
-                        keyboardType: TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        textInputAction: TextInputAction.next,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d+\.?\d{0,2}'),
-                          ),
-                        ],
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Ingresa el monto';
-                          }
-                          final amount = double.tryParse(value);
-                          if (amount == null || amount <= 0) {
-                            return 'Monto inválido';
-                          }
-                          return null;
-                        },
-                        onFieldSubmitted: (_) =>
-                            _descriptionFocus.requestFocus(),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 3,
-                      child: DropdownButtonFormField<Account>(
-                        initialValue: _selectedAccount,
-                        items: _accounts.map((cuenta) {
-                          return DropdownMenuItem<Account>(
-                            value: cuenta,
-                            child: Text(
-                              cuenta.name,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (Account? newValue) {
-                          setState(() {
-                            _selectedAccount = newValue;
-                          });
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Cuenta',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        validator: (value) =>
-                            value == null ? 'Selecciona' : null,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Description field
-                TextFormField(
-                  controller: _descriptionController,
-                  focusNode: _descriptionFocus,
-                  decoration: InputDecoration(
-                    labelText: 'Descripción (opcional)',
-                    hintText: '¿En qué gastaste?',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: const Icon(Icons.description),
+              ],
+              // Transaction type selector (Income/Expense)
+              SegmentedButton<tx.TransactionType>(
+                segments: const [
+                  ButtonSegment(
+                    value: tx.TransactionType.expense,
+                    label: Text('Gasto'),
+                    icon: Icon(Icons.arrow_upward),
                   ),
-                  textInputAction: TextInputAction.next,
-                  textCapitalization: TextCapitalization.sentences,
-                  onFieldSubmitted: (_) => _categoryFocus.requestFocus(),
-                ),
-                const SizedBox(height: 16),
-
-                // Category field
-                TextFormField(
-                  controller: _categoryController,
-                  focusNode: _categoryFocus,
-                  decoration: InputDecoration(
-                    labelText: 'Categoría (opcional)',
-                    hintText: 'Ej: Comida, Transporte, Entretenimiento',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: const Icon(Icons.category),
+                  ButtonSegment(
+                    value: tx.TransactionType.income,
+                    label: Text('Ingreso'),
+                    icon: Icon(Icons.arrow_downward),
                   ),
-                  textCapitalization: TextCapitalization.words,
+                ],
+                emptySelectionAllowed:
+                    true, // Permite que no haya nada seleccionado
+                selected: _transactionType != null
+                    ? <tx.TransactionType>{_transactionType!}
+                    : {},
+                onSelectionChanged: (Set<tx.TransactionType> newSelection) {
+                  setState(() {
+                    _transactionType = newSelection.first;
+                  });
+                },
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor:
+                      _transactionType == tx.TransactionType.income
+                      ? Colors.green.withOpacity(0.2)
+                      : Colors.red.withOpacity(0.2),
+                  selectedForegroundColor:
+                      _transactionType == tx.TransactionType.income
+                      ? Colors.green[800]
+                      : Colors.red[800],
+                  foregroundColor: Colors.grey[600],
                 ),
-                const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 24),
 
-                // Date selector
-                InkWell(
-                  onTap: _selectDate,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.calendar_today),
-                        const SizedBox(width: 12),
-                        Text(
-                          DateFormat('dd/MM/yyyy').format(_selectedDate),
-                          style: const TextStyle(fontSize: 16),
+              // Row for Amount and Account
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      controller: _amountController,
+                      focusNode: _amountFocus,
+                      decoration: InputDecoration(
+                        labelText: 'Monto',
+                        hintText: '0.00',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        const Spacer(),
-                        Text(
-                          _selectedDate.isAtSameMomentAs(DateTime.now())
-                              ? 'Hoy'
-                              : '',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
+                        prefixIcon: const Icon(Icons.attach_money),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textInputAction: TextInputAction.next,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,2}'),
                         ),
                       ],
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Ingresa el monto';
+                        }
+                        final amount = double.tryParse(value);
+                        if (amount == null || amount <= 0) {
+                          return 'Monto inválido';
+                        }
+                        return null;
+                      },
+                      onFieldSubmitted: (_) => _descriptionFocus.requestFocus(),
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 3,
+                    child: DropdownButtonFormField<Account>(
+                      value: _selectedAccount,
+                      items: _accounts.map((cuenta) {
+                        return DropdownMenuItem<Account>(
+                          value: cuenta,
+                          child: Text(
+                            cuenta.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (Account? newValue) {
+                        setState(() {
+                          _selectedAccount = newValue;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Cuenta',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      validator: (value) => value == null ? 'Selecciona' : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
 
-                // Quick save button
-                ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _saveTransaction,
-                  icon: const Icon(Icons.save),
-                  label: const Text('Guardar Transacción'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+              // Description field
+              TextFormField(
+                controller: _descriptionController,
+                focusNode: _descriptionFocus,
+                decoration: InputDecoration(
+                  labelText: 'Descripción',
+                  hintText: '¿En qué gastaste?',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.description),
+                ),
+                textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.sentences,
+                onFieldSubmitted: (_) => _categoryFocus.requestFocus(),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor ingresa una descripción';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Category field
+              TextFormField(
+                controller: _categoryController,
+                focusNode: _categoryFocus,
+                decoration: InputDecoration(
+                  labelText: 'Categoría (opcional)',
+                  hintText: 'Ej: Comida, Transporte, Entretenimiento',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.category),
+                ),
+                textCapitalization: TextCapitalization.words,
+              ),
+              const SizedBox(height: 16),
+
+              // Date selector
+              InkWell(
+                onTap: _selectDate,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today),
+                      const SizedBox(width: 12),
+                      Text(
+                        DateFormat('dd/MM/yyyy').format(_selectedDate),
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const Spacer(),
+                      Text(
+                        DateFormat.yMMMd().format(_selectedDate) ==
+                                DateFormat.yMMMd().format(DateTime.now())
+                            ? 'Hoy'
+                            : '',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 24),
+
+              // Quick save button
+              ElevatedButton.icon(
+                onPressed: _isSaving ? null : _saveTransaction,
+                icon: const Icon(Icons.save),
+                label: const Text('Guardar Transacción'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -346,7 +390,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     IconData icon,
     Color color,
   ) {
-    final isSelected = _transactionType == type;
+    final isSelected = _transactionType == type; // Null check not needed here
 
     return ElevatedButton(
       onPressed: () => setState(() => _transactionType = type),
@@ -383,7 +427,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   }
 
   Future<void> _saveTransaction() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Validar que se haya seleccionado un tipo de movimiento
+    if (_transactionType == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, selecciona si es un Ingreso o un Gasto.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (!_formKey.currentState!.validate()) return; // Null check is correct
 
     if (_selectedAccount == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -413,7 +468,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       final newTransaction = tx.Transaction(
         id: const Uuid().v4(),
         userId: currentUser.id,
-        type: _transactionType,
+        type: _transactionType!, // Now safe to use !
         amount: amount,
         description: _descriptionController.text.trim().isEmpty
             ? null
@@ -430,10 +485,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       await _dbService.insertNewTransaction(newTransaction);
 
       if (mounted) {
-        Navigator.of(context).pop(); // Go back
+        Navigator.of(context).pop(); // Go back or close sheet
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Transacción guardada correctamente'),
+            content: Text('Movimiento guardado correctamente'),
             backgroundColor: Colors.green,
           ),
         );
