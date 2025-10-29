@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../providers/auth_provider.dart';
 // import '../../models/user.dart'; // User model is now Usuario
@@ -48,6 +49,9 @@ class _HomeScreenState extends State<HomeScreen> {
   double _totalAvailableBalance = 0.0; // Sum of all account balances
   bool _isLoading = true;
   double _dailyLimit = 0.0;
+
+  bool _isTravelMode = false;
+  String _currentCurrency = 'ARS';
 
   // State for quick transaction form
   final _quickAddFormKey = GlobalKey<FormState>();
@@ -97,14 +101,21 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      _isTravelMode = prefs.getBool('travel_mode_enabled') ?? false;
+      _currentCurrency = _isTravelMode ? 'USD' : 'ARS';
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentUser = authProvider.user;
       if (currentUser == null) throw Exception("Usuario no encontrado");
 
       final dbService = DatabaseService();
 
-      // Fetch accounts
-      final accounts = await dbService.getAccounts(currentUser.id);
+      // Fetch all accounts and then filter by the current currency mode
+      final allAccounts = await dbService.getAccounts(currentUser.id);
+      final accounts = allAccounts
+          .where((account) => account.moneda == _currentCurrency)
+          .toList();
 
       // Calculate total available balance
       double totalBalance = 0.0;
@@ -116,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
       final dailyTransactions = await dbService.getTransacciones(
+        // TODO: This needs to be adapted to the new user model eventually
         (await dbService.getUsuarioByEmail(currentUser.email))?.idUsuario ?? 0,
         fromDate: startOfDay,
         toDate: endOfDay,
@@ -126,10 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
       if (oldUser != null) {
         final topExpenses = await dbService.getTopTransactionDescriptions(
           oldUser.idUsuario,
+          // TODO: Filter by currency as well in the future
           tx.TipoTransaccion.gasto,
         );
         final topIncomes = await dbService.getTopTransactionDescriptions(
           oldUser.idUsuario,
+          // TODO: Filter by currency as well in the future
           tx.TipoTransaccion.ingreso,
         );
         if (mounted) {
@@ -204,6 +218,18 @@ class _HomeScreenState extends State<HomeScreen> {
                               .grey[600], // Un gris más suave para la fecha
                         ),
                       ),
+                      if (_isTravelMode)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            'Modo Viaje (USD)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepPurple,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   pinned:
@@ -1309,7 +1335,7 @@ class _HomeScreenState extends State<HomeScreen> {
         descripcion: _quickAddDescriptionController.text.trim(),
         fechaTransaccion: DateTime.now(),
         fechaRegistro: DateTime.now(),
-        moneda: 'ARS',
+        moneda: _currentCurrency,
         tipoMovimiento: _quickAddTransactionType == tx.TipoTransaccion.ingreso
             ? 1
             : 2,
@@ -1334,6 +1360,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _quickAddCategoryController.clear();
         _quickAddTransactionType = null; // Deselect transaction type
         _showExtraQuickAddFields = false;
+        // Re-select the default account after saving
+        _quickAddSelectedAccount =
+            _accounts.where((acc) => acc.isDefault).firstOrNull ??
+            (_accounts.isNotEmpty ? _accounts.first : null);
         _quickAddFormKey.currentState?.reset();
       });
       await _loadData(); // Reload all home screen data

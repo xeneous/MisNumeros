@@ -28,6 +28,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
 
   bool _isLoading = false;
   bool _isDefault = false;
+  String _selectedCurrency = 'ARS';
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
       _nameController.text = widget.account!.name;
       _aliasController.text = widget.account!.alias ?? '';
       _isDefault = widget.account!.isDefault;
+      _selectedCurrency = widget.account!.moneda;
     } else {
       _isDefault = false;
     }
@@ -141,6 +143,31 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Currency field
+                  DropdownButtonFormField<String>(
+                    value: _selectedCurrency,
+                    items: ['ARS', 'USD', 'EUR', 'BRL'].map((String currency) {
+                      return DropdownMenuItem<String>(
+                        value: currency,
+                        child: Text('Moneda: $currency'),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedCurrency = newValue;
+                        });
+                      }
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Moneda de la cuenta',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.currency_exchange),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   // Default account toggle
                   Container(
                     decoration: BoxDecoration(
@@ -230,7 +257,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
           alias: _aliasController.text.trim().isEmpty
               ? null
               : _aliasController.text.trim(),
-          moneda: 'ARS', // TODO: Add currency selector in the UI
+          moneda: _selectedCurrency,
           initialBalance: balance,
           currentBalance: balance, // For now, current balance = initial balance
           isDefault: _isDefault,
@@ -248,6 +275,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         );
         if (oldAccounts.isNotEmpty) {
           final oldAccountToUpdate = oldAccounts.first.copyWith(
+            moneda: updatedAccount.moneda,
             esPrincipal: updatedAccount.isDefault,
           );
           await dbService.updateCuenta(oldAccountToUpdate);
@@ -270,7 +298,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
           alias: _aliasController.text.trim().isEmpty
               ? null
               : _aliasController.text.trim(),
-          moneda: 'ARS', // TODO: Add currency selector in the UI
+          moneda: _selectedCurrency,
           type: widget.accountType,
           initialBalance: balance,
           currentBalance: balance,
@@ -293,6 +321,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
               0, // Asegúrate de que el usuario exista en la tabla 'usuarios'
           nombre: newAccount.name,
           // Mapeo manual para corregir la discrepancia de enums
+          moneda: newAccount.moneda,
           tipo: _mapAccountTypeToOldTipoCuenta(newAccount.type),
           fechaCreacion: newAccount.createdAt,
           esPrincipal: newAccount.isDefault,

@@ -1,11 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../providers/auth_provider.dart';
 import '../onboarding/profile_setup_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _isTravelModeEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isTravelModeEnabled = prefs.getBool('travel_mode_enabled') ?? false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,6 +37,30 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const Text(
+            'Modo',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.deepPurple,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            title: const Text('Modo Viaje'),
+            subtitle: Text(
+              _isTravelModeEnabled
+                  ? 'Activado (Moneda: USD)'
+                  : 'Desactivado (Moneda: ARS)',
+            ),
+            value: _isTravelModeEnabled,
+            onChanged: _toggleTravelMode,
+            secondary: const Icon(Icons.flight_takeoff),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          const Divider(height: 32),
           const Text(
             'Cuenta',
             style: TextStyle(
@@ -62,5 +107,20 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _toggleTravelMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('travel_mode_enabled', value);
+    // For now, travel currency is hardcoded to USD
+    if (value) {
+      await prefs.setString('travel_currency', 'USD');
+    }
+
+    setState(() {
+      _isTravelModeEnabled = value;
+    });
+    // Pop the screen and return true to signal that data should be reloaded
+    if (mounted) Navigator.of(context).pop(true);
   }
 }
