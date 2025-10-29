@@ -183,24 +183,28 @@ class AccountListItem extends StatelessWidget {
   }
 
   Color _getAccountTypeColor(AccountType type) {
-    switch (account.type) {
+    switch (type) {
       case AccountType.cash:
         return Colors.green;
       case AccountType.debit:
         return Colors.blue;
       case AccountType.digital:
         return Colors.purple;
+      case AccountType.credit:
+        return Colors.orange;
     }
   }
 
   IconData _getAccountTypeIcon(AccountType type) {
-    switch (account.type) {
+    switch (type) {
       case AccountType.cash:
         return Icons.money;
       case AccountType.debit:
         return Icons.credit_card;
       case AccountType.digital:
         return Icons.account_balance_wallet;
+      case AccountType.credit:
+        return Icons.credit_score;
     }
   }
 

@@ -3,7 +3,8 @@ import 'package:equatable/equatable.dart';
 enum AccountType {
   cash('Efectivo'),
   debit('Debito'),
-  digital('Digital');
+  digital('Digital'),
+  credit('Tarjeta de Crédito');
 
   const AccountType(this.displayName);
   final String displayName;
@@ -16,6 +17,8 @@ enum AccountType {
         return AccountType.debit;
       case 'digital':
         return AccountType.digital;
+      case 'credit':
+        return AccountType.credit;
       default:
         return AccountType.cash; // Default value
     }

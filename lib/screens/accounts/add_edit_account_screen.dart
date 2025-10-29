@@ -366,6 +366,8 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         return Colors.blue;
       case AccountType.digital:
         return Colors.purple;
+      case AccountType.credit:
+        return Colors.orange;
     }
   }
 
@@ -377,6 +379,8 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         return Icons.credit_card;
       case AccountType.digital:
         return Icons.account_balance_wallet;
+      case AccountType.credit:
+        return Icons.credit_score;
     }
   }
 
@@ -388,6 +392,8 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         return 'Cuenta bancaria o tarjeta de débito';
       case AccountType.digital:
         return 'Billeteras digitales como PayPal, Mercado Pago, etc.';
+      case AccountType.credit:
+        return 'Para compras en cuotas o en otra moneda';
     }
   }
 
@@ -400,6 +406,8 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         return old_account.TipoCuenta.bancaria;
       case AccountType.digital:
         return old_account.TipoCuenta.digital;
+      case AccountType.credit:
+        return old_account.TipoCuenta.bancaria; // Map to a similar old type
     }
   }
 }

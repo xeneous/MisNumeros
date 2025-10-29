@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../providers/auth_provider.dart';
 // import '../../models/user.dart'; // User model is now Usuario
@@ -50,8 +51,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   double _dailyLimit = 0.0;
 
-  bool _isTravelMode = false;
-  String _currentCurrency = 'ARS';
+  String _displayMode = 'local'; // 'local', 'travel', 'all'
+  String _activeCurrency = 'ARS'; // The primary currency for the current mode
+  Map<String, double> _totalBalancesByCurrency = {};
 
   // State for quick transaction form
   final _quickAddFormKey = GlobalKey<FormState>();
@@ -60,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _quickAddCategoryController = TextEditingController();
   tx.TipoTransaccion? _quickAddTransactionType;
   Account? _quickAddSelectedAccount;
+  String? _quickAddTransactionCurrency;
   bool _showExtraQuickAddFields = false;
   bool _isSavingQuickTransaction = false;
   final FocusNode _quickAddAmountFocus = FocusNode();
@@ -102,8 +105,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      _isTravelMode = prefs.getBool('travel_mode_enabled') ?? false;
-      _currentCurrency = _isTravelMode ? 'USD' : 'ARS';
+      _displayMode = prefs.getString('display_mode') ?? 'local';
+
+      switch (_displayMode) {
+        case 'local':
+          _activeCurrency = 'ARS';
+          break;
+        case 'travel':
+          _activeCurrency = 'USD'; // Hardcoded for now
+          break;
+        case 'all':
+          _activeCurrency = 'ARS'; // Default for suggestions
+          break;
+      }
 
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentUser = authProvider.user;
@@ -111,16 +125,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final dbService = DatabaseService();
 
-      // Fetch all accounts and then filter by the current currency mode
+      // Fetch all accounts and then filter by the current display mode
       final allAccounts = await dbService.getAccounts(currentUser.id);
-      final accounts = allAccounts
-          .where((account) => account.moneda == _currentCurrency)
-          .toList();
+      final accounts = _displayMode == 'all'
+          ? allAccounts
+          : allAccounts.where((acc) => acc.moneda == _activeCurrency).toList();
 
-      // Calculate total available balance
-      double totalBalance = 0.0;
       final balances = await _calculateBalances(accounts);
-      totalBalance = balances.values.fold(0.0, (sum, balance) => sum + balance);
+      _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(accounts);
 
       // Fetch daily transactions
       final today = DateTime.now();
@@ -155,7 +167,9 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       // Calculate daily limit
-      final dailyLimit = _calculateDailyLimit(totalBalance);
+      final dailyLimit = _calculateDailyLimit(
+        _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
+      );
 
       // TODO: Implementar getProximosGastos en DatabaseService (still hardcoded for now)
       final proximosGastos = _getHardcodedProximosGastos();
@@ -170,7 +184,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _accountBalances = balances;
           _isLoading = false;
           _dailyTransactions = dailyTransactions;
-          _totalAvailableBalance = totalBalance;
           _dailyLimit = dailyLimit;
           // Set default account for quick add form if not already set, inside setState
           if (accounts.isNotEmpty) {
@@ -218,15 +231,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               .grey[600], // Un gris más suave para la fecha
                         ),
                       ),
-                      if (_isTravelMode)
+                      if (_displayMode != 'local')
                         Padding(
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
-                            'Modo Viaje (USD)',
+                            _getModeLabel(),
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Colors.deepPurple,
+                              color: _displayMode == 'travel'
+                                  ? Colors.deepPurple
+                                  : Colors.orange[800],
                             ),
                           ),
                         ),
@@ -266,6 +281,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _getModeLabel() {
+    switch (_displayMode) {
+      case 'travel':
+        return 'Modo Viaje (USD)';
+      case 'all':
+        return 'Modo Mixto (Todas las monedas)';
+      case 'local':
+      default:
+        return '';
+    }
+  }
+
   Widget _buildFinancialContent(User currentUser) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -279,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 flex: 6,
                 child: _buildTitledAmountBox(
                   title: 'Disponible',
-                  amount: _totalAvailableBalance,
+                  balances: _totalBalancesByCurrency,
                   color: Colors.blue[800]!,
                 ),
               ),
@@ -319,7 +346,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTitledAmountBox({
     required String title,
-    required double amount,
+    Map<String, double>? balances,
+    double? amount,
     required Color color,
   }) {
     return Stack(
@@ -334,16 +362,21 @@ class _HomeScreenState extends State<HomeScreen> {
             border: Border.all(color: color.withOpacity(0.2)),
           ),
           child: Center(
-            child: Text(
-              _showFinancialValues
-                  ? _formatFinancialValue(amount)
-                  : '● ● ● ● ●',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                _showFinancialValues
+                    ? (balances != null
+                          ? _formatMultiCurrency(balances)
+                          : _formatFinancialValue(amount ?? 0.0))
+                    : '● ● ● ● ●',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
             ),
           ),
         ),
@@ -931,6 +964,38 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _formatMultiCurrency(Map<String, double> balances) {
+    if (balances.isEmpty) {
+      return _formatFinancialValue(0.0);
+    }
+    if (balances.length == 1) {
+      return _formatFinancialValue(
+        balances.values.first,
+        currency: balances.keys.first,
+      );
+    }
+    return balances.entries
+        .map(
+          (e) =>
+              '${e.key} ${_formatFinancialValue(e.value, showSymbol: false)}',
+        )
+        .join(' / ');
+  }
+
+  Map<String, double> _calculateTotalBalancesByCurrency(
+    List<Account> accounts,
+  ) {
+    final Map<String, double> totals = {};
+    for (var acc in accounts) {
+      totals.update(
+        acc.moneda,
+        (value) => value + acc.currentBalance,
+        ifAbsent: () => acc.currentBalance,
+      );
+    }
+    return totals;
+  }
+
   Widget _buildQuickTransactionForm() {
     final isTypeSelected = _quickAddTransactionType != null;
 
@@ -993,14 +1058,49 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 2,
+                  flex: 3,
                   child: TextFormField(
                     controller: _quickAddAmountController,
                     focusNode: _quickAddAmountFocus,
                     enabled: isTypeSelected,
                     decoration: InputDecoration(
                       labelText: 'Monto',
-                      prefixIcon: const Icon(Icons.attach_money),
+                      prefixIcon:
+                          _quickAddSelectedAccount?.type == AccountType.credit
+                          ? null
+                          : const Icon(Icons.attach_money),
+                      prefix:
+                          _quickAddSelectedAccount?.type == AccountType.credit
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8.0,
+                              ),
+                              child: DropdownButton<String>(
+                                value:
+                                    _quickAddTransactionCurrency ??
+                                    _activeCurrency,
+                                items: ['ARS', 'USD', 'EUR']
+                                    .map(
+                                      (e) => DropdownMenuItem(
+                                        value: e,
+                                        child: Text(e),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _quickAddTransactionCurrency = value;
+                                  });
+                                },
+                                underline: const SizedBox(),
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).textTheme.bodyLarge?.color,
+                                ),
+                              ),
+                            )
+                          : null,
                       border: OutlineInputBorder(
                         // Reduced height
                         borderRadius: BorderRadius.circular(12),
@@ -1024,7 +1124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: DropdownButtonFormField<Account>(
                     value: _quickAddSelectedAccount,
                     items: _accounts.map((cuenta) {
@@ -1037,9 +1137,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     }).toList(),
                     onChanged: isTypeSelected
-                        ? (Account? newValue) => setState(
-                            () => _quickAddSelectedAccount = newValue,
-                          )
+                        ? (Account? newValue) {
+                            setState(() {
+                              _quickAddSelectedAccount = newValue;
+                              // Reset currency if it's not a credit card
+                              if (newValue?.type != AccountType.credit) {
+                                _quickAddTransactionCurrency = null;
+                              }
+                            });
+                          }
                         : null,
                     decoration: InputDecoration(
                       labelText: 'Cuenta',
@@ -1306,6 +1412,41 @@ class _HomeScreenState extends State<HomeScreen> {
     await _saveQuickTransaction();
   }
 
+  Future<void> _exportTransactionsToCsv() async {
+    final dbService = DatabaseService();
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.user;
+    if (currentUser == null) return;
+
+    final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
+    if (oldUser == null) return;
+
+    final transactions = await dbService.getTransacciones(oldUser.idUsuario);
+
+    if (transactions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay movimientos para exportar.')),
+      );
+      return;
+    }
+
+    // Generate CSV content
+    final header = transactions.first.toMap().keys.join(',');
+    final rows = transactions.map((tx) {
+      return tx
+          .toMap()
+          .values
+          .map((value) {
+            // Escape commas and wrap in quotes
+            return '"${value.toString().replaceAll('"', '""')}"';
+          })
+          .join(',');
+    });
+    final csvContent = [header, ...rows].join('\n');
+
+    await Share.share(csvContent, subject: 'Exportación de Movimientos');
+  }
+
   Future<void> _saveQuickTransaction() async {
     if (!_quickAddFormKey.currentState!.validate()) return;
 
@@ -1335,7 +1476,8 @@ class _HomeScreenState extends State<HomeScreen> {
         descripcion: _quickAddDescriptionController.text.trim(),
         fechaTransaccion: DateTime.now(),
         fechaRegistro: DateTime.now(),
-        moneda: _currentCurrency,
+        moneda:
+            _quickAddTransactionCurrency ?? _quickAddSelectedAccount!.moneda,
         tipoMovimiento: _quickAddTransactionType == tx.TipoTransaccion.ingreso
             ? 1
             : 2,
@@ -1469,13 +1611,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Función para formatear valores financieros con opción de privacidad
-  String _formatFinancialValue(double value) {
+  String _formatFinancialValue(
+    double value, {
+    String? currency,
+    bool showSymbol = true,
+  }) {
     if (!_showFinancialValues) {
       return '● ● ● ● ●';
     }
+    String symbol = '\$';
+    if (currency == 'USD') symbol = 'U\$S';
+    if (currency == 'EUR') symbol = '€';
+
     final formatter = NumberFormat.currency(
       locale: 'es_AR',
-      symbol: '\$',
+      symbol: showSymbol ? symbol : '',
       decimalDigits: 2,
     );
     return formatter.format(value);
@@ -1768,6 +1918,14 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.import_export, color: Colors.teal),
+              title: const Text('Exportar Movimientos'),
+              onTap: () {
+                Navigator.pop(context);
+                _exportTransactionsToCsv();
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.settings, color: Colors.grey),
               title: const Text('Configuración'),
               onTap: () {
@@ -2027,6 +2185,21 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Billetera Digital'),
               subtitle: const Text('PayPal, Mercado Pago, etc.'),
               onTap: () => _addAccount(context, AccountType.digital),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.credit_score, color: Colors.orange),
+              ),
+              title: const Text('Tarjeta de Crédito'),
+              subtitle: const Text('Para compras en cuotas o en otra moneda'),
+              onTap: () => _addAccount(context, AccountType.credit),
             ),
           ],
         ),

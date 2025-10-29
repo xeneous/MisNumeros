@@ -13,7 +13,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isTravelModeEnabled = false;
+  String _displayMode = 'local'; // 'local', 'travel', 'all'
 
   @override
   void initState() {
@@ -24,7 +24,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isTravelModeEnabled = prefs.getBool('travel_mode_enabled') ?? false;
+      _displayMode = prefs.getString('display_mode') ?? 'local';
     });
   }
 
@@ -46,18 +46,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          SwitchListTile(
-            title: const Text('Modo Viaje'),
-            subtitle: Text(
-              _isTravelModeEnabled
-                  ? 'Activado (Moneda: USD)'
-                  : 'Desactivado (Moneda: ARS)',
-            ),
-            value: _isTravelModeEnabled,
-            onChanged: _toggleTravelMode,
-            secondary: const Icon(Icons.flight_takeoff),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'local',
+                label: Text('Local'),
+                icon: Icon(Icons.home),
+              ),
+              ButtonSegment(
+                value: 'travel',
+                label: Text('Viaje'),
+                icon: Icon(Icons.flight_takeoff),
+              ),
+              ButtonSegment(
+                value: 'all',
+                label: Text('Todo'),
+                icon: Icon(Icons.public),
+              ),
+            ],
+            selected: <String>{_displayMode},
+            onSelectionChanged: (Set<String> newSelection) {
+              _changeDisplayMode(newSelection.first);
+            },
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: Colors.deepPurple.withOpacity(0.2),
+              selectedForegroundColor: Colors.deepPurple,
             ),
           ),
           const Divider(height: 32),
@@ -109,16 +122,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _toggleTravelMode(bool value) async {
+  Future<void> _changeDisplayMode(String newMode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('travel_mode_enabled', value);
-    // For now, travel currency is hardcoded to USD
-    if (value) {
-      await prefs.setString('travel_currency', 'USD');
-    }
+    await prefs.setString('display_mode', newMode);
 
     setState(() {
-      _isTravelModeEnabled = value;
+      _displayMode = newMode;
     });
     // Pop the screen and return true to signal that data should be reloaded
     if (mounted) Navigator.of(context).pop(true);
