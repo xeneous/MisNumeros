@@ -657,6 +657,30 @@ class DatabaseService {
     );
   }
 
+  Future<List<String>> getTopTransactionDescriptions(
+    int idUsuario,
+    TipoTransaccion tipo, {
+    int limit = 5,
+  }) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery(
+      '''
+      SELECT descripcion, COUNT(descripcion) as freq
+      FROM $transaccionesTable
+      WHERE id_usuario = ? AND tipo = ? AND descripcion IS NOT NULL AND descripcion != ''
+      GROUP BY descripcion
+      ORDER BY freq DESC
+      LIMIT ?
+    ''',
+      [idUsuario, tipo.name, limit],
+    );
+
+    if (maps.isNotEmpty) {
+      return maps.map((map) => map['descripcion'] as String).toList();
+    }
+    return [];
+  }
+
   // New transaction operations (using new_tx.Transaction model)
   Future<int> insertNewTransaction(new_tx.Transaction transaction) async {
     final db = await database;

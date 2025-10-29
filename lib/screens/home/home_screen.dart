@@ -60,6 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSavingQuickTransaction = false;
   final FocusNode _quickAddAmountFocus = FocusNode();
 
+  List<String> _topExpenseDescriptions = [];
+  List<String> _topIncomeDescriptions = [];
   int _currentPage = 0;
 
   @override
@@ -118,6 +120,25 @@ class _HomeScreenState extends State<HomeScreen> {
         fromDate: startOfDay,
         toDate: endOfDay,
       );
+
+      // Fetch top descriptions for quick buttons
+      final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
+      if (oldUser != null) {
+        final topExpenses = await dbService.getTopTransactionDescriptions(
+          oldUser.idUsuario,
+          tx.TipoTransaccion.gasto,
+        );
+        final topIncomes = await dbService.getTopTransactionDescriptions(
+          oldUser.idUsuario,
+          tx.TipoTransaccion.ingreso,
+        );
+        if (mounted) {
+          setState(() {
+            _topExpenseDescriptions = topExpenses;
+            _topIncomeDescriptions = topIncomes;
+          });
+        }
+      }
 
       // Calculate daily limit
       final dailyLimit = _calculateDailyLimit(totalBalance);
@@ -1007,6 +1028,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
+            if (_quickAddTransactionType != null) ...[
+              const SizedBox(height: 16),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                child: _quickAddTransactionType != null
+                    ? _buildQuickCategoryButtons()
+                    : const SizedBox.shrink(),
+              ),
+            ],
             AnimatedSize(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
@@ -1181,6 +1212,74 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildQuickCategoryButtons() {
+    // Use dynamic lists, with a fallback to hardcoded values for new users
+    final List<String> fallbackGastos = [
+      'Supermercado',
+      'Combustible',
+      'Delivery',
+      'Farmacia',
+      'Café',
+    ];
+    final List<String> fallbackIngresos = [
+      'Sueldo',
+      'Venta',
+      'Freelance',
+      'Regalo',
+      'Reintegro',
+    ];
+
+    final bool useExpenseButtons =
+        _quickAddTransactionType == tx.TipoTransaccion.gasto;
+    final List<String> buttons = useExpenseButtons
+        ? (_topExpenseDescriptions.isNotEmpty
+              ? _topExpenseDescriptions
+              : fallbackGastos)
+        : (_topIncomeDescriptions.isNotEmpty
+              ? _topIncomeDescriptions
+              : fallbackIngresos);
+
+    return Wrap(
+      spacing: 8.0,
+      runSpacing: 8.0,
+      children: buttons.map((label) {
+        return ActionChip(
+          label: Text(label),
+          onPressed: () => _saveQuickTransactionWithDescription(label),
+          backgroundColor: Colors.grey[200],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: Colors.grey[300]!),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Future<void> _saveQuickTransactionWithDescription(String description) async {
+    // Set the description from the button
+    _quickAddDescriptionController.text = description;
+
+    // Validate only amount and account, as description is now set
+    if (_quickAddAmountController.text.isEmpty ||
+        _quickAddSelectedAccount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, ingresa un monto y selecciona una cuenta.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      // Request focus on the amount field if it's empty
+      if (_quickAddAmountController.text.isEmpty) {
+        _quickAddAmountFocus.requestFocus();
+      }
+      return;
+    }
+
+    // Call the main save function
+    await _saveQuickTransaction();
+  }
+
   Future<void> _saveQuickTransaction() async {
     if (!_quickAddFormKey.currentState!.validate()) return;
 
@@ -1233,6 +1332,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _quickAddAmountController.clear();
         _quickAddDescriptionController.clear();
         _quickAddCategoryController.clear();
+        _quickAddTransactionType = null; // Deselect transaction type
         _showExtraQuickAddFields = false;
         _quickAddFormKey.currentState?.reset();
       });
