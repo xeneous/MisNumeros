@@ -269,9 +269,10 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         // --- TEMPORARY BRIDGE ---
         // Also update the corresponding "old" Cuenta.
         // This should be removed after the transactions table migration.
+        final oldUserId = await dbService.getOrCreateOldUserId(currentUser);
         final oldAccounts = await dbService.findOldAccountByName(
           updatedAccount.name,
-          int.tryParse(updatedAccount.userId) ?? 0,
+          oldUserId,
         );
         if (oldAccounts.isNotEmpty) {
           final oldAccountToUpdate = oldAccounts.first.copyWith(
@@ -314,11 +315,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         // This should be removed after the transactions table migration.
         final oldAccount = old_account.Cuenta(
           idCuenta: 0, // autoincremento
-          idUsuario:
-              (await dbService.getUsuarioByEmail(
-                currentUser.email,
-              ))?.idUsuario ??
-              0, // Asegúrate de que el usuario exista en la tabla 'usuarios'
+          idUsuario: await dbService.getOrCreateOldUserId(currentUser),
           nombre: newAccount.name,
           // Mapeo manual para corregir la discrepancia de enums
           moneda: newAccount.moneda,

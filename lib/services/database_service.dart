@@ -406,6 +406,44 @@ class DatabaseService {
     }
   }
 
+  Future<void> insertUsuarioFromUser(app_user.User user) async {
+    final db = await database;
+    final newUser = Usuario(
+      idUsuario: 0, // autoincrement
+      email: user.email,
+      passwordHash: 'firebase_auth', // Placeholder
+      alias: user.alias ?? user.displayName ?? user.email.split('@')[0],
+      fechaCreacion: user.createdAt,
+      fechaActualizacion: user.updatedAt,
+      nombre: user.displayName,
+      fechaNacimiento: user.birthDate,
+      fotoUrl: user.profileImageUrl,
+    );
+    await db.insert(
+      usuariosTable,
+      newUser.toMap(),
+      conflictAlgorithm: sql.ConflictAlgorithm.ignore,
+    );
+  }
+
+  /// Ensures a user exists in the old 'usuarios' table and returns their integer ID.
+  /// If the user doesn't exist, it creates them first.
+  Future<int> getOrCreateOldUserId(app_user.User user) async {
+    var oldUser = await getUsuarioByEmail(user.email);
+    if (oldUser == null) {
+      // User does not exist in the old table, so we create it.
+      await insertUsuarioFromUser(user);
+      // Fetch the newly created user to get their auto-incremented ID.
+      oldUser = await getUsuarioByEmail(user.email);
+    }
+    if (oldUser == null) {
+      throw Exception(
+        'Failed to create or find user in the old database schema.',
+      );
+    }
+    return oldUser.idUsuario;
+  }
+
   // Nueva Cuenta operations (new schema)
   Future<int> insertCuenta(Cuenta cuenta) async {
     final db = await database;

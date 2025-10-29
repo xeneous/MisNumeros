@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../providers/auth_provider.dart';
 // import '../../models/user.dart'; // User model is now Usuario
@@ -1461,6 +1462,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
       if (oldUser == null) throw Exception("Usuario no encontrado en DB vieja");
 
+      // Get current location
+      final location = await _getCurrentLocation();
+
       final amount = double.parse(_quickAddAmountController.text);
       final newTransaction = tx.Transaccion(
         idTransaccion: const Uuid().v4(),
@@ -1476,6 +1480,7 @@ class _HomeScreenState extends State<HomeScreen> {
         descripcion: _quickAddDescriptionController.text.trim(),
         fechaTransaccion: DateTime.now(),
         fechaRegistro: DateTime.now(),
+        ubicacion: location,
         moneda:
             _quickAddTransactionCurrency ?? _quickAddSelectedAccount!.moneda,
         tipoMovimiento: _quickAddTransactionType == tx.TipoTransaccion.ingreso
@@ -1518,6 +1523,40 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } finally {
       if (mounted) setState(() => _isSavingQuickTransaction = false);
+    }
+  }
+
+  Future<String?> _getCurrentLocation() async {
+    try {
+      bool serviceEnabled;
+      LocationPermission permission;
+
+      // Test if location services are enabled.
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return null;
+      }
+
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return null;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        // Permissions are denied forever, handle appropriately.
+        return null;
+      }
+
+      // When we reach here, permissions are granted and we can
+      // continue accessing the position of the device.
+      final position = await Geolocator.getCurrentPosition();
+      return '${position.latitude},${position.longitude}';
+    } catch (e) {
+      print('Error getting location: $e');
+      return null;
     }
   }
 

@@ -15,6 +15,7 @@ import 'screens/free/free_area_screen.dart';
 import 'screens/premium/premium_area_screen.dart';
 import 'screens/movimientos/movimientos_screen.dart';
 import 'screens/home/settings_screen.dart';
+// import 'screens/integrations/mercado_pago_auth_screen.dart'; // Comentado para pausar la integración con Mercado Pago
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +50,8 @@ class MyApp extends StatelessWidget {
           '/fixed-expenses': (context) => const FixedExpensesScreen(),
           '/movimientos': (context) => const MovimientosScreen(),
           '/settings': (context) => const SettingsScreen(),
+          // '/mercado-pago-auth': (context) =>
+          //     const MercadoPagoAuthScreen(), // Comentado para pausar la integración con Mercado Pago
         },
       ),
     );
