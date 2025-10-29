@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart' as sql;
 import 'package:path_provider/path_provider.dart';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
 import 'package:path/path.dart';
 import 'dart:io';
@@ -1088,5 +1089,44 @@ class DatabaseService {
   Future<void> close() async {
     final db = await database;
     await db.close();
+  }
+
+  // --- DEBUG & EXPORT ---
+
+  Future<Map<String, List<int>>> exportAllTablesToCsv() async {
+    final db = await database;
+    final Map<String, List<int>> csvFiles = {};
+
+    final tables = [
+      usuariosTable,
+      cuentasTable,
+      categoriasTable,
+      transaccionesTable,
+      gastosFijosTable,
+      proximosGastosTable,
+      contactosTable,
+      accountsTable, // New schema
+      creditCardsTable, // New schema
+    ];
+
+    for (final table in tables) {
+      try {
+        final List<Map<String, dynamic>> maps = await db.query(table);
+        if (maps.isNotEmpty) {
+          final header = maps.first.keys.join(',');
+          final rows = maps.map(
+            (row) => row.values
+                .map((v) => '"${v.toString().replaceAll('"', '""')}"')
+                .join(','),
+          );
+          final csvContent = [header, ...rows].join('\n');
+          csvFiles[table] = utf8.encode(csvContent);
+        }
+      } catch (e) {
+        print('Could not export table $table: $e');
+      }
+    }
+
+    return csvFiles;
   }
 }

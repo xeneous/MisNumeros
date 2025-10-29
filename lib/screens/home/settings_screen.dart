@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:typed_data';
 
 import '../../providers/auth_provider.dart';
 import '../onboarding/profile_setup_screen.dart';
+import '../../services/database_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -129,18 +132,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(height: 32),
           ListTile(
+            leading: const Icon(Icons.storage, color: Colors.blueGrey),
+            title: const Text('Exportar Datos (Debug)'),
+            subtitle: const Text('Genera un CSV de todas las tablas'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () => _exportAllTables(context),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: Colors.grey[300]!),
+            ),
+          ),
+          const Divider(height: 32),
+          ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text(
               'Cerrar Sesión',
               style: TextStyle(color: Colors.red),
             ),
             onTap: () async {
-              await authProvider.signOut();
-              if (context.mounted) {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/login', (route) => false);
-              }
+              await authProvider
+                  .signOut(); // El AuthProvider se encargará de la redirección
             },
           ),
         ],
@@ -157,5 +168,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     // Pop the screen and return true to signal that data should be reloaded
     if (mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _exportAllTables(BuildContext context) async {
+    final dbService = DatabaseService();
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final csvData = await dbService.exportAllTablesToCsv();
+      if (csvData.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('No hay datos para exportar.')),
+        );
+        return;
+      }
+
+      final List<XFile> files = [];
+      for (var entry in csvData.entries) {
+        files.add(
+          XFile.fromData(
+            // Convert List<int> to Uint8List
+            Uint8List.fromList(entry.value),
+            name: '${entry.key}.csv',
+            mimeType: 'text/csv',
+          ),
+        );
+      }
+
+      await Share.shareXFiles(files, subject: 'Exportación de Datos DayByDay');
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error al exportar: $e')));
+    }
   }
 }

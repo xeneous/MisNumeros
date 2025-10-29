@@ -46,8 +46,7 @@ class Cuenta {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'id_cuenta': idCuenta,
+    final map = <String, dynamic>{
       'id_usuario': idUsuario,
       'nombre': nombre,
       'tipo': tipo.name,
@@ -60,6 +59,12 @@ class Cuenta {
       'activa': activa ? 1 : 0,
       'es_principal': esPrincipal ? 1 : 0,
     };
+    // Do not include id_cuenta if it's a new record (id is 0)
+    // to allow autoincrement to work.
+    if (idCuenta != 0) {
+      map['id_cuenta'] = idCuenta;
+    }
+    return map;
   }
 
   factory Cuenta.fromMap(Map<String, dynamic> map) {

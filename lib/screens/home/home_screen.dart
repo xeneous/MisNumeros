@@ -140,8 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
       final dailyTransactions = await dbService.getTransacciones(
-        // TODO: This needs to be adapted to the new user model eventually
-        (await dbService.getUsuarioByEmail(currentUser.email))?.idUsuario ?? 0,
+        await dbService.getOrCreateOldUserId(currentUser),
         fromDate: startOfDay,
         toDate: endOfDay,
       );
