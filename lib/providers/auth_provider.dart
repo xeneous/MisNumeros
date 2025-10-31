@@ -1,7 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:flutter/material.dart';
 
-import '../models/usuario.dart' as db_user;
 import '../models/user.dart';
 import '../services/auth_service.dart';
 import '../services/database_service.dart';
@@ -39,34 +38,69 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> _loadUserFromFirebase(firebase_auth.User firebaseUser) async {
+    print('AuthProvider: _loadUserFromFirebase para UID ${firebaseUser.uid}');
     try {
-      // 1. Try to get user from local DB first for speed
-      final db_user.Usuario? localUser = await _dbService.getUsuarioByEmail(
-        firebaseUser.email!,
+      // Paso 1: Usar Firestore como la fuente de verdad para los datos del perfil del usuario.
+      print(
+        'AuthProvider: Buscando usuario en Firestore con UID ${firebaseUser.uid}',
       );
-      if (localUser != null) {
-        _user = User.fromUsuario(localUser, firebaseUser);
-        notifyListeners(); // Notify early with local data
-      }
-
-      // 2. Then, try to get user from Firestore to get the latest data
-      final firestoreUser = await _dbService.getUserFromFirestore(
+      User? firestoreUser = await _dbService.getUserFromFirestore(
         firebaseUser.uid,
       );
+
+      // Si el usuario no existe en Firestore, se crea un perfil básico.
       if (firestoreUser != null) {
+        print(
+          'AuthProvider: Usuario de Firestore encontrado. Actualizando datos.',
+        );
         _user = firestoreUser;
-        // Sync Firestore data with local DB if it was fetched
-        await _dbService.createOrUpdateUserFromAppUser(firestoreUser);
       } else {
-        // 3. If not in Firestore and wasn't in local DB, create a basic user
-        _user ??= User.fromFirebaseUser(firebaseUser);
+        print(
+          'AuthProvider: No se encontró usuario en Firestore. Creando nuevo perfil...',
+        );
+        // Crear un objeto User básico a partir de los datos de Firebase Auth.
+        final newUser = User.fromFirebaseUser(firebaseUser);
+        // Guardar este nuevo usuario en Firestore para persistirlo.
+        await _dbService.createOrUpdateUserInFirestore(newUser);
+        _user = newUser;
+        print('AuthProvider: Nuevo usuario creado en Firestore.');
       }
+
+      // Paso 2: OBTENER/CREAR EL ID NUMÉRICO LOCAL (el "puente").
+      // Este es el paso clave para usar un ID numérico en las tablas locales de SQLite.
+      // El servicio de base de datos se encarga de crear un registro en la tabla 'usuarios'
+      // si no existe, y devolver el ID numérico autoincremental.
+      print(
+        'AuthProvider: Obteniendo/Creando ID numérico local para las tablas de SQLite...',
+      );
+      final localId = await _dbService.getOrCreateOldUserId(_user!);
+      print('AuthProvider: ID numérico local obtenido: $localId');
+
+      // Asegurarse de que el objeto User en el provider y en Firestore tengan el ID local.
+      if (_user?.localId != localId) {
+        _user = _user!.copyWith(localId: localId);
+        print(
+          'AuthProvider: ID numérico local actualizado en el objeto User del provider.',
+        );
+
+        // PASO CRÍTICO: Persistir el nuevo localId en Firestore para futuras instalaciones.
+        // Esto evita que se genere un nuevo ID si el usuario reinstala la app.
+        await _dbService.createOrUpdateUserInFirestore(_user!);
+        print(
+          'AuthProvider: ID numérico local ($localId) persistido en Firestore.',
+        );
+      }
+
+      // Paso 3: Sincronizar el estado final del usuario con la tabla 'usuarios' de SQLite.
+      // Esto asegura que los datos como el alias o la foto estén actualizados localmente.
+      await _dbService.createOrUpdateUserFromAppUser(_user!);
     } catch (e) {
+      // Si hay un error, especialmente de red, es crucial que el usuario pueda seguir usando la app
+      // con los datos de autenticación básicos. El localId podría no estar disponible.
+      print('AuthProvider: ERROR en _loadUserFromFirebase: $e');
       // Fallback to basic user from Firebase if loading fails
       _user ??= User.fromFirebaseUser(firebaseUser);
     } finally {
-      // Ensure user is not null if firebaseUser is not null
-      _user ??= User.fromFirebaseUser(firebaseUser);
       // Final notification to ensure UI is up-to-date
       notifyListeners();
     }
@@ -100,18 +134,15 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final firebaseUser = await _authService
-          .signInWithGoogleAndGetFirebaseUser();
+      final firebaseUser = await _authService.signInWithGoogle();
       if (firebaseUser != null) {
-        await _loadUserFromFirebase(firebaseUser);
-        _isLoading = false;
-        notifyListeners();
+        // The auth listener will trigger _loadUserFromFirebase automatically.
         return true;
-      } else {
-        _isLoading = false;
-        notifyListeners();
-        return false;
       }
+      // If firebaseUser is null, it means the user cancelled.
+      _isLoading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
       _error = _getErrorMessage(e.toString());
       _isLoading = false;
@@ -132,14 +163,9 @@ class AuthProvider with ChangeNotifier {
         password,
       );
       if (firebaseUser != null) {
-        await _loadUserFromFirebase(firebaseUser);
-        _isLoading = false;
-        notifyListeners();
+        // The auth listener will trigger _loadUserFromFirebase automatically.
         return true;
       }
-      // If user is null, it's a failure, but we must stop loading.
-      _isLoading = false;
-      notifyListeners();
       return false;
     } catch (e) {
       _error = _getErrorMessage(e.toString());
@@ -167,16 +193,9 @@ class AuthProvider with ChangeNotifier {
         alias,
       );
       if (firebaseUser != null) {
-        await _loadUserFromFirebase(
-          firebaseUser, // This will load the user data correctly
-        ); // This will load the user data correctly
-        _isLoading = false;
-        notifyListeners();
+        // The auth listener will trigger _loadUserFromFirebase automatically.
         return true;
       }
-      // If user is null, it's a failure, but we must stop loading.
-      _isLoading = false;
-      notifyListeners();
       return false;
     } catch (e) {
       _error = _getErrorMessage(e.toString());

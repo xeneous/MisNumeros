@@ -352,6 +352,19 @@ class DatabaseService {
     return null;
   }
 
+  Future<List<Usuario>> getAllUsuarios() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      usuariosTable,
+      orderBy: 'id_usuario ASC',
+    );
+
+    if (maps.isNotEmpty) {
+      return maps.map((map) => Usuario.fromMap(map)).toList();
+    }
+    return [];
+  }
+
   Future<int> updateUsuario(Usuario usuario) async {
     final db = await database;
     return await db.update(
@@ -385,12 +398,21 @@ class DatabaseService {
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
       if (doc.exists) {
-        return app_user.User.fromMap(doc.data()!);
+        final data = doc.data()!;
+        // Ensure the user object's 'id' is populated from the document's UID.
+        return app_user.User.fromMap(data..['id'] = uid);
       }
     } catch (e) {
       print('Error getting user from Firestore: $e');
     }
     return null;
+  }
+
+  Future<void> createOrUpdateUserInFirestore(app_user.User user) async {
+    await _firestore
+        .collection('users')
+        .doc(user.id)
+        .set(user.toMap(), firestore.SetOptions(merge: true));
   }
 
   Future<void> createOrUpdateUserFromAppUser(app_user.User user) async {
@@ -430,19 +452,24 @@ class DatabaseService {
   /// Ensures a user exists in the old 'usuarios' table and returns their integer ID.
   /// If the user doesn't exist, it creates them first.
   Future<int> getOrCreateOldUserId(app_user.User user) async {
-    var oldUser = await getUsuarioByEmail(user.email);
-    if (oldUser == null) {
+    Usuario? localUser = await getUsuarioByEmail(user.email);
+    if (localUser == null) {
       // User does not exist in the old table, so we create it.
       await insertUsuarioFromUser(user);
       // Fetch the newly created user to get their auto-incremented ID.
-      oldUser = await getUsuarioByEmail(user.email);
+      localUser = await getUsuarioByEmail(user.email);
+    } else {
+      // If user exists, check if alias needs an update for consistency.
+      if (localUser.alias != user.alias) {
+        await updateUsuario(localUser.copyWith(alias: user.alias));
+      }
     }
-    if (oldUser == null) {
+    if (localUser == null) {
       throw Exception(
         'Failed to create or find user in the old database schema.',
       );
     }
-    return oldUser.idUsuario;
+    return localUser.idUsuario;
   }
 
   // Nueva Cuenta operations (new schema)
@@ -721,64 +748,22 @@ class DatabaseService {
   }
 
   // New transaction operations (using new_tx.Transaction model)
-  Future<int> insertNewTransaction(new_tx.Transaction transaction) async {
-    final db = await database;
-
-    // This is a temporary bridge between the new `Account` model (string ID)
-    // and the old `transacciones` table (int id_cuenta).
-    // It finds the old `id_cuenta` by matching the account name.
-    // This should be removed once the transactions table is migrated.
-    Account? newAccount;
-    int oldAccountId = 0;
-    if (transaction.accountId != null) {
-      newAccount = await getAccount(transaction.accountId!);
-      if (newAccount != null) {
-        final List<Map<String, dynamic>> oldAccounts = await db.query(
-          cuentasTable,
-          where: 'nombre = ? AND id_usuario = ?',
-          whereArgs: [newAccount.name, int.tryParse(newAccount.userId) ?? 0],
-          limit: 1,
-        );
-        if (oldAccounts.isNotEmpty) {
-          oldAccountId = oldAccounts.first['id_cuenta'] as int;
-        }
-      }
-    }
-
-    // Convert new_tx.Transaction to old Transaccion model for insertion
-    final oldTransaction = Transaccion(
-      idTransaccion: transaction.id, // Use the UUID from the new model
-      idUsuario: int.tryParse(transaction.userId) ?? 0,
-      idCuenta: oldAccountId,
-      idCategoria: 1, // TODO: Implement category mapping/selection
-      moneda: newAccount?.moneda ?? 'ARS',
-      tipoMovimiento: transaction.type == new_tx.TransactionType.income
-          ? 1
-          : 2, // 1: Ingreso, 2: Egreso
-      signo: transaction.type == new_tx.TransactionType.income
-          ? 1
-          : -1, // 1 for income, -1 for expense
-      tipo: transaction.type == new_tx.TransactionType.income
-          ? TipoTransaccion.ingreso
-          : TipoTransaccion.gasto,
-      monto: transaction.amount,
-      descripcion: transaction.description,
-      fechaTransaccion: transaction.date,
-      fechaRegistro: transaction.createdAt,
-    );
-
-    final id = await db.insert(transaccionesTable, oldTransaction.toMap());
+  Future<void> insertNewTransaction(new_tx.Transaction transaction) async {
+    // --- NEW: Save directly to Firestore ---
+    await _firestore
+        .collection('transactions')
+        .doc(transaction.id)
+        .set(transaction.toMap());
 
     // After inserting, update the balance of the corresponding new Account
-    if (transaction.accountId != null) {
+    // This logic remains crucial.
+    if (transaction.accountId != null && transaction.accountId!.isNotEmpty) {
       await updateAccountBalance(
         transaction.accountId!,
         transaction.amount,
         _mapNewToOldTransactionType(transaction.type),
       );
     }
-
-    return id;
   }
 
   Future<void> updateAccountBalance(
@@ -793,6 +778,70 @@ class DatabaseService {
           : (account.currentBalance - amount);
       final updatedAccount = account.copyWith(currentBalance: newBalance);
       await updateAccount(updatedAccount);
+    }
+  }
+
+  Future<List<new_tx.Transaction>> getTransactions({
+    required String userId,
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
+    try {
+      firestore.Query query = _firestore
+          .collection('transactions')
+          .where('userId', isEqualTo: userId)
+          .orderBy('date', descending: true);
+
+      if (fromDate != null) {
+        query = query.where('date', isGreaterThanOrEqualTo: fromDate);
+      }
+      if (toDate != null) {
+        query = query.where('date', isLessThanOrEqualTo: toDate);
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map(
+            (doc) =>
+                new_tx.Transaction.fromMap(doc.data() as Map<String, dynamic>),
+          )
+          .toList();
+    } catch (e) {
+      print('Error fetching transactions from Firestore: $e');
+      return [];
+    }
+  }
+
+  Future<List<new_tx.Transaction>> getTransactionsForAccount({
+    required String userId,
+    required String accountId,
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
+    try {
+      firestore.Query query = _firestore
+          .collection('transactions')
+          .where('userId', isEqualTo: userId)
+          .where('accountId', isEqualTo: accountId)
+          .orderBy('date', descending: true);
+
+      if (fromDate != null) {
+        query = query.where('date', isGreaterThanOrEqualTo: fromDate);
+      }
+      if (toDate != null) {
+        query = query.where('date', isLessThanOrEqualTo: toDate);
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs
+          .map(
+            (doc) =>
+                new_tx.Transaction.fromMap(doc.data() as Map<String, dynamic>),
+          )
+          .toList();
+    } catch (e) {
+      print('Error fetching transactions from Firestore: $e');
+      return [];
     }
   }
 

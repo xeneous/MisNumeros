@@ -1,8 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user.dart' as app_user;
 import '../models/user_plan.dart';
+import 'database_service.dart'; // Importar DatabaseService
+import '../models/usuario.dart'; // Importar el modelo antiguo de Usuario
 
 class AuthService {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
@@ -65,11 +66,11 @@ class AuthService {
   }
 
   // Sign in with Google
-  Future<firebase_auth.User?> signInWithGoogleAndGetFirebaseUser() async {
+  Future<firebase_auth.User?> signInWithGoogle() async {
     print('Google Sign-In attempted');
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return null;
+      if (googleUser == null) return null; // User cancelled the sign-in
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
@@ -82,7 +83,7 @@ class AuthService {
       return userCredential.user;
     } catch (e) {
       print('Google Sign-In error: $e');
-      return null;
+      rethrow;
     }
   }
 
@@ -100,7 +101,7 @@ class AuthService {
       return userCredential.user;
     } catch (e) {
       print('Login failed: $e');
-      return null;
+      rethrow;
     }
   }
 
@@ -121,7 +122,7 @@ class AuthService {
       return _auth.currentUser;
     } catch (e) {
       print('Registration failed: $e');
-      return null;
+      rethrow;
     }
   }
 
@@ -146,5 +147,21 @@ class AuthService {
   // Check if user is signed in
   Future<bool> isSignedIn() async {
     return _auth.currentUser != null;
+  }
+
+  // Helper para obtener el id_usuario de la base de datos local
+  Future<int?> _getLocalUserId(firebase_auth.User? firebaseUser) async {
+    if (firebaseUser == null || firebaseUser.email == null) return null;
+
+    try {
+      final dbService = DatabaseService();
+      final Usuario? oldUser = await dbService.getUsuarioByEmail(
+        firebaseUser.email!,
+      );
+      return oldUser?.idUsuario;
+    } catch (e) {
+      print('Error al obtener id_usuario local: $e');
+      return null;
+    }
   }
 }

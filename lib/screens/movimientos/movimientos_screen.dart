@@ -214,6 +214,15 @@ class _MovimientosScreenState extends State<MovimientosScreen> {
     );
   }
 
+  Widget _buildUserManagementSection() {
+    return _buildManagementButton(
+      'Gestionar Usuarios',
+      Icons.supervised_user_circle,
+      Colors.cyan,
+      () => _showUsuariosList(context),
+    );
+  }
+
   Widget _buildManagementButton(
     String title,
     IconData icon,
@@ -448,6 +457,56 @@ class _MovimientosScreenState extends State<MovimientosScreen> {
               child: const Text('Cerrar'),
             ),
           ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _showUsuariosList(BuildContext context) async {
+    try {
+      final usuarios = await _databaseService.getAllUsuarios();
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Lista de Usuarios (Tabla Local)'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: usuarios.isEmpty
+                ? const Text('No hay usuarios registrados en la tabla local.')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: usuarios.length,
+                    itemBuilder: (context, index) {
+                      final usuario = usuarios[index];
+                      return ListTile(
+                        title: Text(
+                          'Alias: ${usuario.alias}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          'ID: ${usuario.idUsuario} | Email: ${usuario.email}',
+                        ),
+                        leading: CircleAvatar(
+                          child: Text(usuario.idUsuario.toString()),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cargando usuarios: $e'),
+          backgroundColor: Colors.red,
         ),
       );
     }

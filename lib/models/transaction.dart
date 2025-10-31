@@ -40,6 +40,10 @@ class Transaction {
   final List<String>? participants; // User IDs of participants
   final Map<String, double>? participantAmounts; // Amount per participant
 
+  // Additional fields
+  final String? currency;
+  final String? location;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -61,6 +65,8 @@ class Transaction {
     this.isSharedExpense = false,
     this.participants,
     this.participantAmounts,
+    this.currency,
+    this.location,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -85,6 +91,8 @@ class Transaction {
     Map<String, double>? participantAmounts,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? currency,
+    String? location,
   }) {
     return Transaction(
       id: id ?? this.id,
@@ -106,6 +114,8 @@ class Transaction {
       participantAmounts: participantAmounts ?? this.participantAmounts,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      currency: currency ?? this.currency,
+      location: location ?? this.location,
     );
   }
 
@@ -134,6 +144,8 @@ class Transaction {
       ),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'currency': currency,
+      'location': location,
     };
   }
 
@@ -174,6 +186,8 @@ class Transaction {
           : null,
       createdAt: DateTime.parse(map['createdAt']),
       updatedAt: DateTime.parse(map['updatedAt']),
+      currency: map['currency'],
+      location: map['location'],
     );
   }
 

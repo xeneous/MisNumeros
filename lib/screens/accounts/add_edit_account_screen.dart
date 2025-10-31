@@ -145,7 +145,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
 
                   // Currency field
                   DropdownButtonFormField<String>(
-                    value: _selectedCurrency,
+                    initialValue: _selectedCurrency,
                     items: ['ARS', 'USD', 'EUR', 'BRL'].map((String currency) {
                       return DropdownMenuItem<String>(
                         value: currency,

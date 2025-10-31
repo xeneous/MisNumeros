@@ -39,7 +39,7 @@ class Account extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  Account({
+  const Account({
     required this.id,
     required this.userId,
     required this.name,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -14,6 +15,8 @@ import '../../models/account.dart';
 import '../../models/user.dart';
 import '../../models/gasto_fijo.dart';
 import '../../models/transaccion.dart' as tx; // Import old Transaccion model
+import '../../models/transaction.dart'
+    as new_tx; // Import NEW Transaction model
 import '../../services/database_service.dart';
 import '../accounts/add_edit_account_screen.dart';
 import '../accounts/accounts_screen.dart';
@@ -40,6 +43,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final DatabaseService dbService = DatabaseService();
   // Controla si se muestran los valores o asteriscos
   bool _showFinancialValues = true;
 
@@ -47,7 +51,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Account> _accounts = [];
   List<ProximoGasto> _proximosGastos = [];
   Map<String, double> _accountBalances = {};
-  List<tx.Transaccion> _dailyTransactions = []; // List for daily transactions
+  List<new_tx.Transaction> _dailyTransactions =
+      []; // List for daily transactions
   double _totalAvailableBalance = 0.0; // Sum of all account balances
   bool _isLoading = true;
   double _dailyLimit = 0.0;
@@ -80,10 +85,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    // Properly dispose of controllers and focus nodes
     _quickAddAmountController.dispose();
     _quickAddDescriptionController.dispose();
     _quickAddCategoryController.dispose();
+
+    // Ensure focus node is properly disposed
+    if (_quickAddAmountFocus.hasFocus) {
+      _quickAddAmountFocus.unfocus();
+    }
     _quickAddAmountFocus.dispose();
+
     super.dispose();
   }
 
@@ -124,8 +136,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final currentUser = authProvider.user;
       if (currentUser == null) throw Exception("Usuario no encontrado");
 
-      final dbService = DatabaseService();
-
       // Fetch all accounts and then filter by the current display mode
       final allAccounts = await dbService.getAccounts(currentUser.id);
       final accounts = _displayMode == 'all'
@@ -139,31 +149,31 @@ class _HomeScreenState extends State<HomeScreen> {
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
-      final dailyTransactions = await dbService.getTransacciones(
-        await dbService.getOrCreateOldUserId(currentUser),
+
+      // Fetch data that depends on localId only if it's valid
+      final dailyTransactions = await dbService.getTransactions(
+        userId: currentUser.id,
         fromDate: startOfDay,
         toDate: endOfDay,
       );
 
-      // Fetch top descriptions for quick buttons
-      final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
-      if (oldUser != null) {
-        final topExpenses = await dbService.getTopTransactionDescriptions(
-          oldUser.idUsuario,
-          // TODO: Filter by currency as well in the future
+      List<String> topExpenses = [];
+      List<String> topIncomes = [];
+
+      if (currentUser.localId != null && currentUser.localId! > 0) {
+        topExpenses = await dbService.getTopTransactionDescriptions(
+          currentUser.localId!,
           tx.TipoTransaccion.gasto,
         );
-        final topIncomes = await dbService.getTopTransactionDescriptions(
-          oldUser.idUsuario,
-          // TODO: Filter by currency as well in the future
+        topIncomes = await dbService.getTopTransactionDescriptions(
+          currentUser.localId!,
           tx.TipoTransaccion.ingreso,
         );
-        if (mounted) {
-          setState(() {
-            _topExpenseDescriptions = topExpenses;
-            _topIncomeDescriptions = topIncomes;
-          });
-        }
+      } else {
+        // Log a warning if localId is missing after login. This shouldn't happen with the new logic.
+        print(
+          'ADVERTENCIA: No se pudo obtener el ID de usuario local. Algunas funciones estarán deshabilitadas.',
+        );
       }
 
       // Calculate daily limit
@@ -185,6 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoading = false;
           _dailyTransactions = dailyTransactions;
           _dailyLimit = dailyLimit;
+          _topExpenseDescriptions = topExpenses;
+          _topIncomeDescriptions = topIncomes;
           // Set default account for quick add form if not already set, inside setState
           if (accounts.isNotEmpty) {
             _quickAddSelectedAccount =
@@ -692,8 +704,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentUser = authProvider.user;
     if (currentUser == null) return;
 
-    final dbService = DatabaseService();
-
     // --- TEMPORARY BRIDGE ---
     // Find the old account ID to fetch transactions from the old table structure.
     final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
@@ -715,9 +725,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final oldAccountId = oldAccounts.first.idCuenta;
     // --- END OF BRIDGE ---
 
-    final transactions = await dbService.getTransacciones(
-      oldUser.idUsuario,
-      accountId: oldAccountId,
+    // Fetch transactions using the new model and correct IDs
+    final transactions = await dbService.getTransactionsForAccount(
+      userId: currentUser.id, // Use Firebase UID
+      accountId: account.id, // Use new Account ID
       // Por defecto, muestra los de hoy. Se podrá cambiar en el futuro.
       fromDate: DateTime(
         DateTime.now().year,
@@ -754,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: transactions.isEmpty
                       ? const Center(
-                          child: Text('No hay movimientos en esta cuenta.'),
+                          child: Text('No hay movimientos para esta cuenta.'),
                         )
                       : _buildTransactionList(transactions, scrollController),
                 ),
@@ -771,10 +782,10 @@ class _HomeScreenState extends State<HomeScreen> {
     double totalEgresos = 0;
 
     for (var transaction in _dailyTransactions) {
-      if (transaction.tipo == tx.TipoTransaccion.ingreso) {
-        totalIngresos += transaction.monto;
+      if (transaction.type == new_tx.TransactionType.income) {
+        totalIngresos += transaction.amount;
       } else {
-        totalEgresos += transaction.monto;
+        totalEgresos += transaction.amount;
       }
     }
 
@@ -827,10 +838,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showDailyTransactionsDetail() {
     Map<String, double> subtotals = {};
     for (var transaction in _dailyTransactions) {
+      final signo = transaction.type == new_tx.TransactionType.income ? 1 : -1;
       subtotals.update(
-        transaction.moneda,
-        (value) => value + (transaction.signo * transaction.monto),
-        ifAbsent: () => transaction.signo * transaction.monto,
+        transaction.currency ?? 'ARS',
+        (value) => value + (signo * transaction.amount),
+        ifAbsent: () => signo * transaction.amount,
       );
     }
 
@@ -857,7 +869,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Aquí irían los subtotales por moneda
               Expanded(
                 child: _buildTransactionList(
-                  _dailyTransactions,
+                  _dailyTransactions as List<new_tx.Transaction>,
                   scrollController,
                 ),
               ),
@@ -869,7 +881,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTransactionList(
-    List<tx.Transaccion> transactions,
+    List<new_tx.Transaction> transactions,
     ScrollController controller,
   ) {
     return ListView.separated(
@@ -878,7 +890,7 @@ class _HomeScreenState extends State<HomeScreen> {
       itemCount: transactions.length,
       itemBuilder: (context, index) {
         final transaction = transactions[index];
-        // Re-use the same widget as for daily transactions, but now it's in a list
+        // Re-use the same widget as for daily transactions, but now it's in a list.
         return _buildDailyTransactionItem(transaction);
       },
       separatorBuilder: (context, index) => const Divider(height: 1),
@@ -1059,67 +1071,86 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Expanded(
                   flex: 3,
-                  child: TextFormField(
-                    controller: _quickAddAmountController,
-                    focusNode: _quickAddAmountFocus,
-                    enabled: isTypeSelected,
-                    decoration: InputDecoration(
-                      labelText: 'Monto',
-                      prefixIcon:
-                          _quickAddSelectedAccount?.type == AccountType.credit
-                          ? null
-                          : const Icon(Icons.attach_money),
-                      prefix:
-                          _quickAddSelectedAccount?.type == AccountType.credit
-                          ? Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8.0,
-                              ),
-                              child: DropdownButton<String>(
-                                value:
-                                    _quickAddTransactionCurrency ??
-                                    _activeCurrency,
-                                items: ['ARS', 'USD', 'EUR']
-                                    .map(
-                                      (e) => DropdownMenuItem(
-                                        value: e,
-                                        child: Text(e),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _quickAddTransactionCurrency = value;
-                                  });
-                                },
-                                underline: const SizedBox(),
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).textTheme.bodyLarge?.color,
-                                ),
-                              ),
-                            )
-                          : null,
-                      border: OutlineInputBorder(
-                        // Reduced height
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    validator: (value) {
-                      if (!isTypeSelected) return null;
-                      if (value == null || value.isEmpty) {
-                        return 'Requerido';
+                  child: Focus(
+                    onKeyEvent: (node, event) {
+                      // Handle keyboard events properly to prevent assertion errors
+                      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+                        // Allow normal key processing
+                        return KeyEventResult.ignored;
                       }
-                      if (double.tryParse(value) == null ||
-                          double.parse(value) <= 0) {
-                        return 'Inválido';
+                      if (event is KeyUpEvent) {
+                        // Ensure we only handle KeyUp events for keys that were actually pressed
+                        return KeyEventResult.ignored;
                       }
-                      return null;
+                      return KeyEventResult.ignored;
                     },
+                    child: TextFormField(
+                      controller: _quickAddAmountController,
+                      focusNode: _quickAddAmountFocus,
+                      enabled: isTypeSelected,
+                      decoration: InputDecoration(
+                        labelText: 'Monto',
+                        prefixIcon:
+                            _quickAddSelectedAccount?.type == AccountType.credit
+                            ? null
+                            : const Icon(Icons.attach_money),
+                        prefix:
+                            _quickAddSelectedAccount?.type == AccountType.credit
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8.0,
+                                ),
+                                child: DropdownButton<String>(
+                                  value:
+                                      _quickAddTransactionCurrency ??
+                                      _activeCurrency,
+                                  items: ['ARS', 'USD', 'EUR']
+                                      .map(
+                                        (e) => DropdownMenuItem(
+                                          value: e,
+                                          child: Text(e),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _quickAddTransactionCurrency = value;
+                                    });
+                                  },
+                                  underline: const SizedBox(),
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge?.color,
+                                  ),
+                                ),
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          // Reduced height
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d*'),
+                        ),
+                      ],
+                      validator: (value) {
+                        if (!isTypeSelected) return null;
+                        if (value == null || value.isEmpty) {
+                          return 'Requerido';
+                        }
+                        if (double.tryParse(value) == null ||
+                            double.parse(value) <= 0) {
+                          return 'Inválido';
+                        }
+                        return null;
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1262,8 +1293,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDailyTransactionItem(tx.Transaccion transaction) {
-    final isIncome = transaction.tipo == tx.TipoTransaccion.ingreso;
+  Widget _buildDailyTransactionItem(new_tx.Transaction transaction) {
+    final isIncome = transaction.type == new_tx.TransactionType.income;
     final icon = isIncome ? Icons.arrow_downward : Icons.arrow_upward;
     final color = isIncome ? Colors.green : Colors.red;
 
@@ -1283,14 +1314,14 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  transaction.descripcion ?? 'Sin descripción',
+                  transaction.description ?? 'Sin descripción',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 Text(
-                  '${transaction.tipo.displayName} - ${DateFormat('dd/MM/yy').format(transaction.fechaTransaccion)}',
+                  '${isIncome ? "Ingreso" : "Gasto"} - ${DateFormat('dd/MM/yy').format(transaction.date)}',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -1298,7 +1329,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Text(
             _showFinancialValues
-                ? _formatFinancialValue(transaction.monto)
+                ? _formatFinancialValue(
+                    transaction.amount,
+                    currency: transaction.currency,
+                  )
                 : '● ● ● ● ●',
             style: TextStyle(
               fontSize: 15,
@@ -1316,28 +1350,42 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.only(top: 16.0),
       child: Column(
         children: [
-          TextFormField(
-            controller: _quickAddDescriptionController,
-            decoration: InputDecoration(
-              labelText: 'Descripción (opcional)',
-              prefixIcon: const Icon(Icons.description),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+          Focus(
+            onKeyEvent: (node, event) {
+              // Handle keyboard events properly for description field
+              return KeyEventResult.ignored;
+            },
+            child: TextFormField(
+              controller: _quickAddDescriptionController,
+              decoration: InputDecoration(
+                labelText: 'Descripción (opcional)',
+                prefixIcon: const Icon(Icons.description),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
+              textCapitalization: TextCapitalization.sentences,
+              inputFormatters: [LengthLimitingTextInputFormatter(100)],
             ),
-            textCapitalization: TextCapitalization.sentences,
           ),
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _quickAddCategoryController,
-            decoration: InputDecoration(
-              labelText: 'Categoría (opcional)',
-              prefixIcon: const Icon(Icons.category),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+          Focus(
+            onKeyEvent: (node, event) {
+              // Handle keyboard events properly for category field
+              return KeyEventResult.ignored;
+            },
+            child: TextFormField(
+              controller: _quickAddCategoryController,
+              decoration: InputDecoration(
+                labelText: 'Categoría (opcional)',
+                prefixIcon: const Icon(Icons.category),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
+              textCapitalization: TextCapitalization.words,
+              inputFormatters: [LengthLimitingTextInputFormatter(50)],
             ),
-            textCapitalization: TextCapitalization.words,
           ),
         ],
       ),
@@ -1457,62 +1505,72 @@ class _HomeScreenState extends State<HomeScreen> {
       final currentUser = authProvider.user;
       if (currentUser == null) throw Exception("Usuario no autenticado");
 
-      final dbService = DatabaseService();
-      final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
-      if (oldUser == null) throw Exception("Usuario no encontrado en DB vieja");
-
       // Get current location
       final location = await _getCurrentLocation();
 
       final amount = double.parse(_quickAddAmountController.text);
-      final newTransaction = tx.Transaccion(
-        idTransaccion: const Uuid().v4(),
-        idUsuario: oldUser.idUsuario,
-        idCuenta: (await dbService.findOldAccountByName(
-          _quickAddSelectedAccount!.name,
-          oldUser.idUsuario,
-        )).first.idCuenta,
-        idCategoria:
-            1, // TODO: Implement category selection. Using default '1' for now.
-        tipo: _quickAddTransactionType!,
-        monto: amount,
-        descripcion: _quickAddDescriptionController.text.trim(),
-        fechaTransaccion: DateTime.now(),
-        fechaRegistro: DateTime.now(),
-        ubicacion: location,
-        moneda:
+
+      // --- NEW MODEL IMPLEMENTATION ---
+      // Create a new transaction using the Firestore-compatible model
+      final newTransaction = new_tx.Transaction(
+        id: const Uuid().v4(),
+        userId: currentUser.id, // Use the Firebase UID (String)
+        accountId: _quickAddSelectedAccount!.id,
+        type: _quickAddTransactionType == tx.TipoTransaccion.gasto
+            ? new_tx.TransactionType.expense
+            : new_tx.TransactionType.income,
+        amount: amount,
+        description: _quickAddDescriptionController.text.trim().isEmpty
+            ? null
+            : _quickAddDescriptionController.text.trim(),
+        category: _quickAddCategoryController.text.trim().isEmpty
+            ? null
+            : _quickAddCategoryController.text.trim(),
+        date: DateTime.now(),
+        currency:
             _quickAddTransactionCurrency ?? _quickAddSelectedAccount!.moneda,
-        tipoMovimiento: _quickAddTransactionType == tx.TipoTransaccion.ingreso
-            ? 1
-            : 2,
-        signo: _quickAddTransactionType == tx.TipoTransaccion.ingreso ? 1 : -1,
+        location: location,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
 
-      await dbService.insertTransaccion(newTransaction);
+      // 1. Save the new transaction to Firestore
+      await dbService.insertNewTransaction(newTransaction);
 
-      // --- BRIDGE ---
-      // After inserting the old transaction, update the balance on the new Account model
-      await dbService.updateAccountBalance(
-        _quickAddSelectedAccount!.id,
-        amount,
-        _quickAddTransactionType!,
+      // 2. Update local state without a full reload to avoid screen flickering
+      final accountIndex = _accounts.indexWhere(
+        (acc) => acc.id == newTransaction.accountId,
       );
-      // --- END BRIDGE ---
+      if (accountIndex != -1) {
+        final oldAccount = _accounts[accountIndex];
+        final newBalance = newTransaction.type == new_tx.TransactionType.income
+            ? oldAccount.currentBalance + newTransaction.amount
+            : oldAccount.currentBalance - newTransaction.amount;
 
-      // Reset form and reload data
+        // Update the specific account in the list
+        _accounts[accountIndex] = oldAccount.copyWith(
+          currentBalance: newBalance,
+        );
+
+        // Recalculate total balances and daily limit
+        _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(_accounts);
+        _dailyLimit = _calculateDailyLimit(
+          _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
+        );
+      }
+
+      // Add the new transaction to the daily list
+      _dailyTransactions.insert(0, newTransaction);
+
+      // 3. Reset form and trigger a single UI update
       setState(() {
         _quickAddAmountController.clear();
         _quickAddDescriptionController.clear();
         _quickAddCategoryController.clear();
         _quickAddTransactionType = null; // Deselect transaction type
         _showExtraQuickAddFields = false;
-        // Re-select the default account after saving
-        _quickAddSelectedAccount =
-            _accounts.where((acc) => acc.isDefault).firstOrNull ??
-            (_accounts.isNotEmpty ? _accounts.first : null);
-        _quickAddFormKey.currentState?.reset();
+        // The state variables for balances are already updated above
       });
-      await _loadData(); // Reload all home screen data
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1559,8 +1617,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showAddTransactionSheet() {
-    showModalBottomSheet(
+  void _showAddTransactionSheet() async {
+    final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true, // Permite que el sheet ocupe más pantalla
       backgroundColor: Colors.transparent, // Para bordes redondeados
@@ -1570,7 +1628,12 @@ class _HomeScreenState extends State<HomeScreen> {
         minChildSize: 0.5, // Altura mínima
         builder: (_, controller) => const AddTransactionScreen(isSheet: true),
       ),
-    ).then((_) => _loadData()); // Refresca los datos cuando se cierra
+    );
+
+    // Refresca los datos solo si la transacción fue exitosa
+    if (result == true) {
+      _loadData();
+    }
   }
 
   void _selectAccountForExpense(ProximoGasto gasto) {
@@ -1690,11 +1753,14 @@ class _HomeScreenState extends State<HomeScreen> {
       if (currentUser == null) return 0.0;
 
       final dbService = DatabaseService();
-      final userIdInt = int.parse(currentUser.id);
+      // FIX: Use the local integer ID for the old database schema.
+      // Do not parse the Firebase UID.
+      final userIdInt = currentUser.localId;
+      if (userIdInt == null || userIdInt == 0) return 0.0;
+
       final List<GastoFijo> fixedExpenses = await dbService.getGastosFijos(
         userIdInt,
       );
-
       // For now, return 0.0 since we need to fix the user model integration
       double totalFixedExpenses = 0.0;
 

@@ -1,5 +1,3 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
 class MercadoPagoService {
   // Credenciales de prueba para el flujo de autorización de usuarios (OAuth)
   // DEBES REEMPLAZAR ESTOS VALORES con los que te dio Mercado Pago

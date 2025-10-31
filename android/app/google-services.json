@@ -9,10 +9,18 @@
       "client_info": {
         "mobilesdk_app_id": "1:439049372849:android:d9ef2ca1a6b28e30de8e90",
         "android_client_info": {
-          "package_name": "com.example.posicion"
+          "package_name": "com.xeneous.daybyday"
         }
       },
       "oauth_client": [
+        {
+          "client_id": "439049372849-sfnm1smmm9abjk32cgb4938tcno8vlrc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.xeneous.daybyday",
+            "certificate_hash": "42411004f6dc8be42f999b56b3a4a974136ac5e6"
+          }
+        },
         {
           "client_id": "439049372849-jvortpbj3qnfcunppikpqgh9nlsbune1.apps.googleusercontent.com",
           "client_type": 3

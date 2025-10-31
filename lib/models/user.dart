@@ -13,6 +13,7 @@ class User {
   final UserPlan userPlan;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int? localId; // El ID numérico de la tabla 'usuarios'
 
   User({
     required this.id,
@@ -25,6 +26,7 @@ class User {
     this.userPlan = UserPlan.premium,
     required this.createdAt,
     required this.updatedAt,
+    this.localId,
   });
 
   User copyWith({
@@ -38,6 +40,7 @@ class User {
     UserPlan? userPlan,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? localId,
   }) {
     return User(
       id: id ?? this.id,
@@ -50,13 +53,14 @@ class User {
       userPlan: userPlan ?? this.userPlan,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      localId: localId ?? this.localId,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'email': email,
+      'uid': id, // Use 'uid' to be consistent with Firebase convention
+      'email': email, // localId is not persisted to Firestore
       'displayName': displayName,
       'alias': alias,
       'birthDate': birthDate?.toIso8601String(),
@@ -70,8 +74,12 @@ class User {
 
   factory User.fromMap(Map<String, dynamic> map) {
     return User(
-      id: map['id'],
-      email: map['email'],
+      id:
+          map['id'] ??
+          map['uid'] ??
+          '', // Handle both old ('id') and new ('uid') fields
+      email: map['email'] ?? '',
+      localId: map['localId'],
       displayName: map['displayName'],
       alias: map['alias'],
       birthDate: map['birthDate'] != null
@@ -114,6 +122,7 @@ class User {
       birthDate: usuario.fechaNacimiento,
       createdAt: usuario.fechaCreacion,
       updatedAt: usuario.fechaActualizacion,
+      localId: usuario.idUsuario, // Asignamos el ID local aquí
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -31,39 +32,64 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => AuthProvider())],
-      child: MaterialApp(
-        title: 'DayByDay',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-          useMaterial3: true,
-        ),
-        home: const AuthWrapper(),
-        routes: {
-          '/login': (context) => const LoginScreen(),
-          '/register': (context) => const RegisterScreen(),
-          '/onboarding': (context) => const ProfileSetupScreen(),
-          '/free': (context) => const FreeAreaScreen(),
-          '/premium': (context) => const PremiumAreaScreen(),
-          '/home': (context) => const HomeScreen(),
-          '/accounts': (context) => const AccountsScreen(),
-          '/credit-cards': (context) => const CreditCardsScreen(),
-          '/fixed-expenses': (context) => const FixedExpensesScreen(),
-          '/movimientos': (context) => const MovimientosScreen(),
-          '/settings': (context) => const SettingsScreen(),
-          // '/mercado-pago-auth': (context) =>
-          //     const MercadoPagoAuthScreen(), // Comentado para pausar la integración con Mercado Pago
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          // Add keyboard shortcuts to prevent assertion errors
+          const SingleActivator(LogicalKeyboardKey.escape): () {},
         },
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            // Global keyboard event handler to prevent assertion errors
+            // This ensures proper keyboard state management
+            return KeyEventResult.ignored;
+          },
+          child: MaterialApp(
+            title: 'DayByDay',
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+              useMaterial3: true,
+            ),
+            home: const AuthWrapper(),
+            routes: {
+              '/login': (context) => const LoginScreen(),
+              '/register': (context) => const RegisterScreen(),
+              '/onboarding': (context) => const ProfileSetupScreen(),
+              '/free': (context) => const FreeAreaScreen(),
+              '/premium': (context) => const PremiumAreaScreen(),
+              '/home': (context) => const HomeScreen(),
+              '/accounts': (context) => const AccountsScreen(),
+              '/credit-cards': (context) => const CreditCardsScreen(),
+              '/fixed-expenses': (context) => const FixedExpensesScreen(),
+              '/movimientos': (context) => const MovimientosScreen(),
+              '/settings': (context) => const SettingsScreen(),
+              // '/mercado-pago-auth': (context) =>
+              //     const MercadoPagoAuthScreen(), // Comentado para pausar la integración con Mercado Pago
+            },
+          ),
+        ),
       ),
     );
   }
 }
 
 // Widget that handles authentication-based navigation
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Usamos Consumer solo para reconstruir la UI cuando cambia el estado de autenticación.
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         // Show loading while checking authentication state or initializing

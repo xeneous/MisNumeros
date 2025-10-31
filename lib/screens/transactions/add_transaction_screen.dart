@@ -71,6 +71,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     // Credit card controllers removed
     // _installmentsController.dispose();
     // _interestAmountController.dispose();
+
+    // Properly dispose focus nodes to prevent keyboard event errors
+    if (_amountFocus.hasFocus) {
+      _amountFocus.unfocus();
+    }
+    if (_descriptionFocus.hasFocus) {
+      _descriptionFocus.unfocus();
+    }
+    if (_categoryFocus.hasFocus) {
+      _categoryFocus.unfocus();
+    }
+
     _amountFocus.dispose();
     _descriptionFocus.dispose();
     _categoryFocus.dispose();
@@ -223,48 +235,55 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: TextFormField(
-                      controller: _amountController,
-                      focusNode: _amountFocus,
-                      decoration: InputDecoration(
-                        labelText: 'Monto',
-                        hintText: '0.00',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        prefixIcon: const Icon(Icons.attach_money),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textInputAction: TextInputAction.next,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d+\.?\d{0,2}'),
-                        ),
-                      ],
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Ingresa el monto';
-                        }
-                        final amount = double.tryParse(value);
-                        if (amount == null || amount <= 0) {
-                          return 'Monto inválido';
-                        }
-                        return null;
+                    child: Focus(
+                      onKeyEvent: (node, event) {
+                        // Handle keyboard events properly to prevent assertion errors
+                        return KeyEventResult.ignored;
                       },
-                      onFieldSubmitted: (_) => _descriptionFocus.requestFocus(),
+                      child: TextFormField(
+                        controller: _amountController,
+                        focusNode: _amountFocus,
+                        decoration: InputDecoration(
+                          labelText: 'Monto',
+                          hintText: '0.00',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.attach_money),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textInputAction: TextInputAction.next,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d+\.?\d{0,2}'),
+                          ),
+                        ],
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Ingresa el monto';
+                          }
+                          final amount = double.tryParse(value);
+                          if (amount == null || amount <= 0) {
+                            return 'Monto inválido';
+                          }
+                          return null;
+                        },
+                        onFieldSubmitted: (_) =>
+                            _descriptionFocus.requestFocus(),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 3,
                     child: DropdownButtonFormField<Account>(
-                      value: _selectedAccount,
+                      initialValue: _selectedAccount,
                       items: _accounts.map((cuenta) {
                         return DropdownMenuItem<Account>(
                           value: cuenta,
@@ -293,42 +312,56 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               const SizedBox(height: 16),
 
               // Description field
-              TextFormField(
-                controller: _descriptionController,
-                focusNode: _descriptionFocus,
-                decoration: InputDecoration(
-                  labelText: 'Descripción',
-                  hintText: '¿En qué gastaste?',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  prefixIcon: const Icon(Icons.description),
-                ),
-                textInputAction: TextInputAction.next,
-                textCapitalization: TextCapitalization.sentences,
-                onFieldSubmitted: (_) => _categoryFocus.requestFocus(),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor ingresa una descripción';
-                  }
-                  return null;
+              Focus(
+                onKeyEvent: (node, event) {
+                  // Handle keyboard events properly for description field
+                  return KeyEventResult.ignored;
                 },
+                child: TextFormField(
+                  controller: _descriptionController,
+                  focusNode: _descriptionFocus,
+                  decoration: InputDecoration(
+                    labelText: 'Descripción',
+                    hintText: '¿En qué gastaste?',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.description),
+                  ),
+                  textInputAction: TextInputAction.next,
+                  textCapitalization: TextCapitalization.sentences,
+                  inputFormatters: [LengthLimitingTextInputFormatter(100)],
+                  onFieldSubmitted: (_) => _categoryFocus.requestFocus(),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Por favor ingresa una descripción';
+                    }
+                    return null;
+                  },
+                ),
               ),
               const SizedBox(height: 16),
 
               // Category field
-              TextFormField(
-                controller: _categoryController,
-                focusNode: _categoryFocus,
-                decoration: InputDecoration(
-                  labelText: 'Categoría (opcional)',
-                  hintText: 'Ej: Comida, Transporte, Entretenimiento',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              Focus(
+                onKeyEvent: (node, event) {
+                  // Handle keyboard events properly for category field
+                  return KeyEventResult.ignored;
+                },
+                child: TextFormField(
+                  controller: _categoryController,
+                  focusNode: _categoryFocus,
+                  decoration: InputDecoration(
+                    labelText: 'Categoría (opcional)',
+                    hintText: 'Ej: Comida, Transporte, Entretenimiento',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.category),
                   ),
-                  prefixIcon: const Icon(Icons.category),
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [LengthLimitingTextInputFormatter(50)],
                 ),
-                textCapitalization: TextCapitalization.words,
               ),
               const SizedBox(height: 16),
 
@@ -467,7 +500,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       // Create new tx.Transaction model instance
       final newTransaction = tx.Transaction(
         id: const Uuid().v4(),
-        userId: currentUser.id,
+        userId: currentUser.id, // This is the Firebase UID (String)
         type: _transactionType!, // Now safe to use !
         amount: amount,
         description: _descriptionController.text.trim().isEmpty
@@ -485,7 +518,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       await _dbService.insertNewTransaction(newTransaction);
 
       if (mounted) {
-        Navigator.of(context).pop(); // Go back or close sheet
+        Navigator.of(
+          context,
+        ).pop(true); // Go back or close sheet and signal success
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Movimiento guardado correctamente'),
