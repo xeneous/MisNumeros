@@ -8,7 +8,8 @@ enum TipoCategoria {
 
 class Categoria {
   final int idCategoria;
-  final int idUsuario;
+  final String
+  userId; // Changed from int idUsuario to String userId (Firebase UID)
   final String nombre;
   final TipoCategoria tipo;
   final String colorHex;
@@ -20,7 +21,7 @@ class Categoria {
 
   Categoria({
     required this.idCategoria,
-    required this.idUsuario,
+    required this.userId,
     required this.nombre,
     required this.tipo,
     this.colorHex = '#6B73FF',
@@ -33,7 +34,7 @@ class Categoria {
 
   Categoria copyWith({
     int? idCategoria,
-    int? idUsuario,
+    String? userId,
     String? nombre,
     TipoCategoria? tipo,
     String? colorHex,
@@ -45,7 +46,7 @@ class Categoria {
   }) {
     return Categoria(
       idCategoria: idCategoria ?? this.idCategoria,
-      idUsuario: idUsuario ?? this.idUsuario,
+      userId: userId ?? this.userId,
       nombre: nombre ?? this.nombre,
       tipo: tipo ?? this.tipo,
       colorHex: colorHex ?? this.colorHex,
@@ -60,7 +61,7 @@ class Categoria {
   Map<String, dynamic> toMap() {
     return {
       'id_categoria': idCategoria,
-      'id_usuario': idUsuario,
+      'user_id': userId, // Changed field name to user_id for consistency
       'nombre': nombre,
       'tipo': tipo.name,
       'color_hex': colorHex,
@@ -75,7 +76,9 @@ class Categoria {
   factory Categoria.fromMap(Map<String, dynamic> map) {
     return Categoria(
       idCategoria: map['id_categoria'],
-      idUsuario: map['id_usuario'],
+      userId:
+          map['user_id'] ??
+          map['id_usuario'], // Support both old and new field names for migration
       nombre: map['nombre'],
       tipo: TipoCategoria.values.firstWhere(
         (tipo) => tipo.name == map['tipo'],

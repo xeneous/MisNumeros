@@ -10,7 +10,8 @@ enum FrecuenciaGasto {
 
 class GastoFijo {
   final int idGasto;
-  final int idUsuario;
+  final String
+  userId; // Changed from int idUsuario to String userId (Firebase UID)
   final int idCuenta;
   final int idCategoria;
   final String nombre;
@@ -28,7 +29,7 @@ class GastoFijo {
 
   GastoFijo({
     required this.idGasto,
-    required this.idUsuario,
+    required this.userId,
     required this.idCuenta,
     required this.idCategoria,
     required this.nombre,
@@ -47,7 +48,7 @@ class GastoFijo {
 
   GastoFijo copyWith({
     int? idGasto,
-    int? idUsuario,
+    String? userId,
     int? idCuenta,
     int? idCategoria,
     String? nombre,
@@ -65,7 +66,7 @@ class GastoFijo {
   }) {
     return GastoFijo(
       idGasto: idGasto ?? this.idGasto,
-      idUsuario: idUsuario ?? this.idUsuario,
+      userId: userId ?? this.userId,
       idCuenta: idCuenta ?? this.idCuenta,
       idCategoria: idCategoria ?? this.idCategoria,
       nombre: nombre ?? this.nombre,
@@ -86,7 +87,7 @@ class GastoFijo {
   Map<String, dynamic> toMap() {
     return {
       'id_gasto': idGasto,
-      'id_usuario': idUsuario,
+      'user_id': userId, // Changed field name to user_id for consistency
       'id_cuenta': idCuenta,
       'id_categoria': idCategoria,
       'nombre': nombre,
@@ -107,7 +108,9 @@ class GastoFijo {
   factory GastoFijo.fromMap(Map<String, dynamic> map) {
     return GastoFijo(
       idGasto: map['id_gasto'],
-      idUsuario: map['id_usuario'],
+      userId:
+          map['user_id'] ??
+          map['id_usuario'], // Support both old and new field names for migration
       idCuenta: map['id_cuenta'],
       idCategoria: map['id_categoria'],
       nombre: map['nombre'],

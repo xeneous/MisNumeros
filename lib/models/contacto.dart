@@ -1,6 +1,7 @@
 class Contacto {
   final int idContacto;
-  final int idUsuario;
+  final String
+  userId; // Changed from int idUsuario to String userId (Firebase UID)
   final String nombre;
   final String? email;
   final String? telefono;
@@ -11,7 +12,7 @@ class Contacto {
 
   Contacto({
     required this.idContacto,
-    required this.idUsuario,
+    required this.userId,
     required this.nombre,
     this.email,
     this.telefono,
@@ -23,7 +24,7 @@ class Contacto {
 
   Contacto copyWith({
     int? idContacto,
-    int? idUsuario,
+    String? userId,
     String? nombre,
     String? email,
     String? telefono,
@@ -34,7 +35,7 @@ class Contacto {
   }) {
     return Contacto(
       idContacto: idContacto ?? this.idContacto,
-      idUsuario: idUsuario ?? this.idUsuario,
+      userId: userId ?? this.userId,
       nombre: nombre ?? this.nombre,
       email: email ?? this.email,
       telefono: telefono ?? this.telefono,
@@ -48,7 +49,7 @@ class Contacto {
   Map<String, dynamic> toMap() {
     return {
       'id_contacto': idContacto,
-      'id_usuario': idUsuario,
+      'user_id': userId, // Changed field name to user_id for consistency
       'nombre': nombre,
       'email': email,
       'telefono': telefono,
@@ -62,7 +63,9 @@ class Contacto {
   factory Contacto.fromMap(Map<String, dynamic> map) {
     return Contacto(
       idContacto: map['id_contacto'],
-      idUsuario: map['id_usuario'],
+      userId:
+          map['user_id'] ??
+          map['id_usuario'], // Support both old and new field names for migration
       nombre: map['nombre'],
       email: map['email'],
       telefono: map['telefono'],

@@ -22,7 +22,10 @@ import '../models/credit_card.dart';
 class DatabaseService {
   static sql.Database? _database;
   static const String _dbName = 'expense_manager.db';
-  static const int _dbVersion = 7; // Incremented for migration
+  static const int _dbVersion = 8; // Incremented for Firebase UID migration
+
+  // Cache for table schema information to avoid repeated PRAGMA queries
+  static final Map<String, bool> _tableHasOldUserIdColumn = {};
 
   // Table names
   static const String usuariosTable = 'usuarios';
@@ -79,7 +82,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE $cuentasTable (
         id_cuenta INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_usuario INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
         nombre VARCHAR(50) NOT NULL,
         tipo VARCHAR(20) NOT NULL,
         numero_cuenta VARCHAR(50),
@@ -90,7 +93,7 @@ class DatabaseService {
         fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         activa BOOLEAN NOT NULL DEFAULT 1,
         es_principal BOOLEAN NOT NULL DEFAULT 0,
-        FOREIGN KEY (id_usuario) REFERENCES $usuariosTable (id_usuario)
+        FOREIGN KEY (user_id) REFERENCES $usuariosTable (id_usuario)
       )
     ''');
 
@@ -98,7 +101,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE $categoriasTable (
         id_categoria INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_usuario INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
         nombre VARCHAR(50) NOT NULL,
         tipo VARCHAR(10) NOT NULL,
         color_hex VARCHAR(7) NOT NULL DEFAULT '#6B73FF',
@@ -107,7 +110,7 @@ class DatabaseService {
         padre_id INTEGER,
         fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         activa BOOLEAN NOT NULL DEFAULT 1,
-        FOREIGN KEY (id_usuario) REFERENCES $usuariosTable (id_usuario),
+        FOREIGN KEY (user_id) REFERENCES $usuariosTable (id_usuario),
         FOREIGN KEY (padre_id) REFERENCES $categoriasTable (id_categoria)
       )
     ''');
@@ -116,7 +119,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE $transaccionesTable (
         id_transaccion TEXT PRIMARY KEY,
-        id_usuario INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
         id_cuenta INTEGER NOT NULL,
         id_categoria INTEGER NOT NULL,
         tipo_movimiento INTEGER NOT NULL DEFAULT 2,
@@ -132,7 +135,7 @@ class DatabaseService {
         ubicacion TEXT,
         imagen_url TEXT,
         notas TEXT,
-        FOREIGN KEY (id_usuario) REFERENCES $usuariosTable (id_usuario),
+        FOREIGN KEY (user_id) REFERENCES $usuariosTable (id_usuario),
         FOREIGN KEY (id_cuenta) REFERENCES $cuentasTable (id_cuenta),
         FOREIGN KEY (id_categoria) REFERENCES $categoriasTable (id_categoria)
       )
@@ -142,7 +145,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE $gastosFijosTable (
         id_gasto INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_usuario INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
         id_cuenta INTEGER NOT NULL,
         id_categoria INTEGER NOT NULL,
         nombre VARCHAR(100) NOT NULL,
@@ -157,7 +160,7 @@ class DatabaseService {
         fecha_fin DATE,
         activo BOOLEAN NOT NULL DEFAULT 1,
         recordatorio_dias INTEGER DEFAULT 3,
-        FOREIGN KEY (id_usuario) REFERENCES $usuariosTable (id_usuario),
+        FOREIGN KEY (user_id) REFERENCES $usuariosTable (id_usuario),
         FOREIGN KEY (id_cuenta) REFERENCES $cuentasTable (id_cuenta),
         FOREIGN KEY (id_categoria) REFERENCES $categoriasTable (id_categoria)
       )
@@ -185,7 +188,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE $contactosTable (
         id_contacto INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_usuario INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
         nombre VARCHAR(50) NOT NULL,
         email VARCHAR(100),
         telefono VARCHAR(20),
@@ -193,7 +196,7 @@ class DatabaseService {
         cuenta_destino VARCHAR(50),
         notas TEXT,
         favorito BOOLEAN NOT NULL DEFAULT 0,
-        FOREIGN KEY (id_usuario) REFERENCES $usuariosTable (id_usuario)
+        FOREIGN KEY (user_id) REFERENCES $usuariosTable (id_usuario)
       )
     ''');
 
@@ -246,6 +249,52 @@ class DatabaseService {
     int oldVersion,
     int newVersion,
   ) async {
+    if (oldVersion < 8) {
+      // Migration to Firebase UID - Add user_id columns and migrate data
+      // First check if columns exist before adding them
+      try {
+        await db.execute('ALTER TABLE $cuentasTable ADD COLUMN user_id TEXT');
+      } catch (e) {
+        print('user_id column already exists in $cuentasTable or error: $e');
+      }
+
+      try {
+        await db.execute(
+          'ALTER TABLE $categoriasTable ADD COLUMN user_id TEXT',
+        );
+      } catch (e) {
+        print('user_id column already exists in $categoriasTable or error: $e');
+      }
+
+      try {
+        await db.execute(
+          'ALTER TABLE $transaccionesTable ADD COLUMN user_id TEXT',
+        );
+      } catch (e) {
+        print(
+          'user_id column already exists in $transaccionesTable or error: $e',
+        );
+      }
+
+      try {
+        await db.execute(
+          'ALTER TABLE $gastosFijosTable ADD COLUMN user_id TEXT',
+        );
+      } catch (e) {
+        print(
+          'user_id column already exists in $gastosFijosTable or error: $e',
+        );
+      }
+
+      try {
+        await db.execute('ALTER TABLE $contactosTable ADD COLUMN user_id TEXT');
+      } catch (e) {
+        print('user_id column already exists in $contactosTable or error: $e');
+      }
+
+      // Note: Data migration will be handled at runtime when users log in
+      // The old id_usuario columns will be kept for backward compatibility during transition
+    }
     if (oldVersion < 7) {
       // Add moneda column to accounts table
       await db.execute(
@@ -273,7 +322,7 @@ class DatabaseService {
       await db.execute('''
         CREATE TABLE $transaccionesTable (
           id_transaccion TEXT PRIMARY KEY,
-          id_usuario INTEGER NOT NULL,
+          user_id TEXT NOT NULL,
           id_cuenta INTEGER NOT NULL,
           id_categoria INTEGER NOT NULL,
           tipo_movimiento INTEGER NOT NULL DEFAULT 2,
@@ -289,7 +338,7 @@ class DatabaseService {
           ubicacion TEXT,
           imagen_url TEXT,
           notas TEXT,
-          FOREIGN KEY (id_usuario) REFERENCES $usuariosTable (id_usuario),
+          FOREIGN KEY (user_id) REFERENCES $usuariosTable (id_usuario),
           FOREIGN KEY (id_cuenta) REFERENCES $cuentasTable (id_cuenta),
           FOREIGN KEY (id_categoria) REFERENCES $categoriasTable (id_categoria)
         )
@@ -472,18 +521,85 @@ class DatabaseService {
     return localUser.idUsuario;
   }
 
+  /// Migrates existing data from integer user IDs to Firebase UIDs
+  /// This method should be called when a user logs in to ensure their data is properly migrated
+  Future<void> migrateUserDataToFirebaseUID(
+    String firebaseUID,
+    int oldUserId,
+  ) async {
+    final db = await database;
+
+    try {
+      // Only migrate if oldUserId is valid (> 0)
+      if (oldUserId <= 0) {
+        print(
+          'Skipping migration - no valid old user ID (oldUserId: $oldUserId)',
+        );
+        return;
+      }
+
+      // Check if each table has the old id_usuario column before trying to migrate
+      final tables = [
+        cuentasTable,
+        categoriasTable,
+        transaccionesTable,
+        gastosFijosTable,
+        contactosTable,
+      ];
+
+      for (final tableName in tables) {
+        try {
+          final hasOldColumn = await _hasOldUserIdColumn(db, tableName);
+          if (hasOldColumn) {
+            await db.update(
+              tableName,
+              {'user_id': firebaseUID},
+              where: 'id_usuario = ? AND (user_id IS NULL OR user_id = "")',
+              whereArgs: [oldUserId],
+            );
+            print(
+              'Migrated $tableName from user ID $oldUserId to Firebase UID $firebaseUID',
+            );
+          } else {
+            print(
+              'Skipping $tableName - no id_usuario column (new installation)',
+            );
+          }
+        } catch (e) {
+          print('Error migrating table $tableName: $e');
+        }
+      }
+
+      print('Migration completed for Firebase UID $firebaseUID');
+    } catch (e) {
+      print('Error in migration process: $e');
+    }
+  }
+
   // Nueva Cuenta operations (new schema)
   Future<int> insertCuenta(Cuenta cuenta) async {
     final db = await database;
     return await db.insert(cuentasTable, cuenta.toMap());
   }
 
-  Future<List<Cuenta>> getCuentas(int idUsuario) async {
+  Future<List<Cuenta>> getCuentas(String userId) async {
     final db = await database;
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, cuentasTable);
+
+    String whereClause = 'user_id = ?';
+    List<dynamic> whereArgs = [userId];
+
+    if (hasOldColumn) {
+      whereClause = 'user_id = ? OR id_usuario = ?';
+      whereArgs = [userId, userId];
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       cuentasTable,
-      where: 'id_usuario = ?',
-      whereArgs: [idUsuario],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'fecha_creacion DESC',
     );
 
@@ -524,12 +640,24 @@ class DatabaseService {
   }
 
   // Helper to find an old account by name for the bridge
-  Future<List<Cuenta>> findOldAccountByName(String name, int userId) async {
+  Future<List<Cuenta>> findOldAccountByName(String name, String userId) async {
     final db = await database;
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, cuentasTable);
+
+    String whereClause = 'nombre = ? AND user_id = ?';
+    List<dynamic> whereArgs = [name, userId];
+
+    if (hasOldColumn) {
+      whereClause = 'nombre = ? AND (user_id = ? OR id_usuario = ?)';
+      whereArgs = [name, userId, userId];
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       cuentasTable,
-      where: 'nombre = ? AND id_usuario = ?',
-      whereArgs: [name, userId],
+      where: whereClause,
+      whereArgs: whereArgs,
     );
 
     return maps.map((map) => Cuenta.fromMap(map)).toList();
@@ -538,10 +666,44 @@ class DatabaseService {
   // Cuenta operations
   Future<int> insertAccount(Account account) async {
     final db = await database;
+
+    // Save to both SQLite local and Firestore for persistence
+    await _firestore
+        .collection('accounts')
+        .doc(account.id)
+        .set(account.toMap());
+    print('DatabaseService: Account saved to Firestore: ${account.name}');
+
     return await db.insert(accountsTable, account.toMap());
   }
 
   Future<List<Account>> getAccounts(String userId) async {
+    try {
+      // First try to get accounts from Firestore (persistent)
+      final snapshot = await _firestore
+          .collection('accounts')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final firestoreAccounts = snapshot.docs
+            .map((doc) => Account.fromMap(doc.data()))
+            .toList();
+
+        print(
+          'DatabaseService: Found ${firestoreAccounts.length} accounts in Firestore',
+        );
+
+        // Sync Firestore accounts to local SQLite
+        await _syncAccountsToLocal(firestoreAccounts);
+
+        return firestoreAccounts;
+      }
+    } catch (e) {
+      print('DatabaseService: Error fetching accounts from Firestore: $e');
+    }
+
+    // Fallback to local SQLite if Firestore fails
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       accountsTable,
@@ -550,7 +712,12 @@ class DatabaseService {
       orderBy: 'createdAt DESC',
     );
 
-    return maps.map((map) => Account.fromMap(map)).toList();
+    final localAccounts = maps.map((map) => Account.fromMap(map)).toList();
+    print(
+      'DatabaseService: Found ${localAccounts.length} accounts in local SQLite',
+    );
+
+    return localAccounts;
   }
 
   Future<Account?> getAccount(String id) async {
@@ -569,6 +736,18 @@ class DatabaseService {
 
   Future<int> updateAccount(Account account) async {
     final db = await database;
+
+    // Update in both Firestore and local SQLite
+    try {
+      await _firestore
+          .collection('accounts')
+          .doc(account.id)
+          .set(account.toMap(), firestore.SetOptions(merge: true));
+      print('DatabaseService: Account updated in Firestore: ${account.name}');
+    } catch (e) {
+      print('DatabaseService: Error updating account in Firestore: $e');
+    }
+
     return await db.update(
       accountsTable,
       account.toMap(),
@@ -587,7 +766,7 @@ class DatabaseService {
       // Find and delete the corresponding "old" Cuenta.
       final oldAccounts = await findOldAccountByName(
         accountToDelete.name,
-        int.tryParse(accountToDelete.userId) ?? 0,
+        accountToDelete.userId,
       );
       for (final oldAccount in oldAccounts) {
         await deleteCuenta(oldAccount.idCuenta);
@@ -609,12 +788,24 @@ class DatabaseService {
     );
   }
 
-  Future<List<Categoria>> getCategorias(int idUsuario) async {
+  Future<List<Categoria>> getCategorias(String userId) async {
     final db = await database;
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, categoriasTable);
+
+    String whereClause = 'user_id = ?';
+    List<dynamic> whereArgs = [userId];
+
+    if (hasOldColumn) {
+      whereClause = 'user_id = ? OR id_usuario = ?';
+      whereArgs = [userId, userId];
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       categoriasTable,
-      where: 'id_usuario = ?',
-      whereArgs: [idUsuario],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'nombre ASC',
     );
 
@@ -661,14 +852,23 @@ class DatabaseService {
   }
 
   Future<List<Transaccion>> getTransacciones(
-    int idUsuario, {
+    String userId, {
     DateTime? fromDate,
     DateTime? toDate,
     int? accountId,
   }) async {
     final db = await database;
-    String whereClause = 'id_usuario = ?';
-    List<dynamic> whereArgs = [idUsuario];
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, transaccionesTable);
+
+    String whereClause = 'user_id = ?';
+    List<dynamic> whereArgs = [userId];
+
+    if (hasOldColumn) {
+      whereClause = 'user_id = ? OR id_usuario = ?';
+      whereArgs = [userId, userId];
+    }
 
     if (accountId != null) {
       whereClause += ' AND id_cuenta = ?';
@@ -724,22 +924,31 @@ class DatabaseService {
   }
 
   Future<List<String>> getTopTransactionDescriptions(
-    int idUsuario,
+    String userId,
     TipoTransaccion tipo, {
     int limit = 5,
   }) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery(
-      '''
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, transaccionesTable);
+
+    String whereClause = 'user_id = ?';
+    List<dynamic> queryArgs = [userId, tipo.name, limit];
+
+    if (hasOldColumn) {
+      whereClause = '(user_id = ? OR id_usuario = ?)';
+      queryArgs = [userId, userId, tipo.name, limit];
+    }
+
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT descripcion, COUNT(descripcion) as freq
       FROM $transaccionesTable
-      WHERE id_usuario = ? AND tipo = ? AND descripcion IS NOT NULL AND descripcion != ''
+      WHERE $whereClause AND tipo = ? AND descripcion IS NOT NULL AND descripcion != ''
       GROUP BY descripcion
       ORDER BY freq DESC
       LIMIT ?
-    ''',
-      [idUsuario, tipo.name, limit],
-    );
+    ''', queryArgs);
 
     if (maps.isNotEmpty) {
       return maps.map((map) => map['descripcion'] as String).toList();
@@ -749,20 +958,30 @@ class DatabaseService {
 
   // New transaction operations (using new_tx.Transaction model)
   Future<void> insertNewTransaction(new_tx.Transaction transaction) async {
+    print(
+      'DatabaseService: Saving transaction to Firestore - ID: ${transaction.id}, Amount: ${transaction.amount}, Account: ${transaction.accountId}',
+    );
+
     // --- NEW: Save directly to Firestore ---
     await _firestore
         .collection('transactions')
         .doc(transaction.id)
         .set(transaction.toMap());
 
+    print('DatabaseService: Transaction saved to Firestore successfully');
+
     // After inserting, update the balance of the corresponding new Account
     // This logic remains crucial.
     if (transaction.accountId != null && transaction.accountId!.isNotEmpty) {
+      print(
+        'DatabaseService: Updating account balance for account ${transaction.accountId}',
+      );
       await updateAccountBalance(
         transaction.accountId!,
         transaction.amount,
         _mapNewToOldTransactionType(transaction.type),
       );
+      print('DatabaseService: Account balance updated successfully');
     }
   }
 
@@ -771,13 +990,29 @@ class DatabaseService {
     double amount,
     TipoTransaccion type,
   ) async {
+    print(
+      'DatabaseService: updateAccountBalance called - AccountID: $accountId, Amount: $amount, Type: ${type.name}',
+    );
+
     final account = await getAccount(accountId);
     if (account != null) {
+      print('DatabaseService: Current balance: ${account.currentBalance}');
+
       final newBalance = type == TipoTransaccion.ingreso
           ? (account.currentBalance + amount)
           : (account.currentBalance - amount);
-      final updatedAccount = account.copyWith(currentBalance: newBalance);
+
+      print('DatabaseService: New balance will be: $newBalance');
+
+      final updatedAccount = account.copyWith(
+        currentBalance: newBalance,
+        updatedAt: DateTime.now(), // Update timestamp
+      );
+
       await updateAccount(updatedAccount);
+      print('DatabaseService: Account balance updated in database');
+    } else {
+      print('DatabaseService: ERROR - Account not found with ID: $accountId');
     }
   }
 
@@ -787,25 +1022,55 @@ class DatabaseService {
     DateTime? toDate,
   }) async {
     try {
+      // Simplified query without complex indexes - just get all user transactions
       firestore.Query query = _firestore
           .collection('transactions')
-          .where('userId', isEqualTo: userId)
-          .orderBy('date', descending: true);
-
-      if (fromDate != null) {
-        query = query.where('date', isGreaterThanOrEqualTo: fromDate);
-      }
-      if (toDate != null) {
-        query = query.where('date', isLessThanOrEqualTo: toDate);
-      }
+          .where('userId', isEqualTo: userId);
 
       final snapshot = await query.get();
-      return snapshot.docs
+      List<new_tx.Transaction> transactions = snapshot.docs
           .map(
             (doc) =>
                 new_tx.Transaction.fromMap(doc.data() as Map<String, dynamic>),
           )
           .toList();
+
+      // Get current valid account IDs to filter orphaned transactions
+      final validAccounts = await getAccounts(userId);
+      final validAccountIds = validAccounts.map((a) => a.id).toSet();
+
+      print(
+        'DatabaseService: Found ${transactions.length} total transactions, ${validAccountIds.length} valid accounts',
+      );
+
+      // Filter out transactions for accounts that no longer exist
+      transactions = transactions.where((tx) {
+        final isValidAccount =
+            tx.accountId != null && validAccountIds.contains(tx.accountId);
+        if (!isValidAccount) {
+          print(
+            'DatabaseService: Filtering out transaction for non-existent account: ${tx.accountId}',
+          );
+        }
+        return isValidAccount;
+      }).toList();
+
+      // Filter by date in memory if needed (avoids complex Firestore indexes)
+      if (fromDate != null || toDate != null) {
+        transactions = transactions.where((tx) {
+          if (fromDate != null && tx.date.isBefore(fromDate)) return false;
+          if (toDate != null && tx.date.isAfter(toDate)) return false;
+          return true;
+        }).toList();
+      }
+
+      // Sort by date in memory
+      transactions.sort((a, b) => b.date.compareTo(a.date));
+
+      print(
+        'DatabaseService: Returning ${transactions.length} valid transactions',
+      );
+      return transactions;
     } catch (e) {
       print('Error fetching transactions from Firestore: $e');
       return [];
@@ -819,26 +1084,43 @@ class DatabaseService {
     DateTime? toDate,
   }) async {
     try {
+      // Simplified query - just get all user transactions and filter in memory
       firestore.Query query = _firestore
           .collection('transactions')
-          .where('userId', isEqualTo: userId)
-          .where('accountId', isEqualTo: accountId)
-          .orderBy('date', descending: true);
-
-      if (fromDate != null) {
-        query = query.where('date', isGreaterThanOrEqualTo: fromDate);
-      }
-      if (toDate != null) {
-        query = query.where('date', isLessThanOrEqualTo: toDate);
-      }
+          .where('userId', isEqualTo: userId);
 
       final snapshot = await query.get();
-      return snapshot.docs
+      List<new_tx.Transaction> transactions = snapshot.docs
           .map(
             (doc) =>
                 new_tx.Transaction.fromMap(doc.data() as Map<String, dynamic>),
           )
           .toList();
+
+      // Verify the account still exists before returning transactions
+      final account = await getAccount(accountId);
+      if (account == null) {
+        print(
+          'DatabaseService: Account $accountId no longer exists, returning empty list',
+        );
+        return [];
+      }
+
+      // Filter by account and date in memory (avoids complex Firestore indexes)
+      transactions = transactions.where((tx) {
+        if (tx.accountId != accountId) return false;
+        if (fromDate != null && tx.date.isBefore(fromDate)) return false;
+        if (toDate != null && tx.date.isAfter(toDate)) return false;
+        return true;
+      }).toList();
+
+      // Sort by date in memory
+      transactions.sort((a, b) => b.date.compareTo(a.date));
+
+      print(
+        'DatabaseService: Returning ${transactions.length} transactions for account $accountId',
+      );
+      return transactions;
     } catch (e) {
       print('Error fetching transactions from Firestore: $e');
       return [];
@@ -861,12 +1143,24 @@ class DatabaseService {
     return await db.insert(gastosFijosTable, gastoFijo.toMap());
   }
 
-  Future<List<GastoFijo>> getGastosFijos(int idUsuario) async {
+  Future<List<GastoFijo>> getGastosFijos(String userId) async {
     final db = await database;
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, gastosFijosTable);
+
+    String whereClause = 'user_id = ?';
+    List<dynamic> whereArgs = [userId];
+
+    if (hasOldColumn) {
+      whereClause = 'user_id = ? OR id_usuario = ?';
+      whereArgs = [userId, userId];
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       gastosFijosTable,
-      where: 'id_usuario = ?',
-      whereArgs: [idUsuario],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'fecha_inicio DESC',
     );
 
@@ -912,18 +1206,27 @@ class DatabaseService {
     return await db.insert(proximosGastosTable, proximoGasto.toMap());
   }
 
-  Future<List<ProximoGasto>> getProximosGastos(int idUsuario) async {
+  Future<List<ProximoGasto>> getProximosGastos(String userId) async {
     final db = await database;
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, gastosFijosTable);
+
+    String whereClause = 'gf.user_id = ?';
+    List<dynamic> queryArgs = [userId];
+
+    if (hasOldColumn) {
+      whereClause = 'gf.user_id = ? OR gf.id_usuario = ?';
+      queryArgs = [userId, userId];
+    }
+
     // Join with gastos_fijos to get user-specific upcoming expenses
-    final List<Map<String, dynamic>> maps = await db.rawQuery(
-      '''
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT pg.* FROM $proximosGastosTable pg
       INNER JOIN $gastosFijosTable gf ON pg.id_gasto = gf.id_gasto
-      WHERE gf.id_usuario = ?
+      WHERE $whereClause
       ORDER BY pg.fecha_vencimiento ASC
-    ''',
-      [idUsuario],
-    );
+    ''', queryArgs);
 
     return maps.map((map) => ProximoGasto.fromMap(map)).toList();
   }
@@ -967,12 +1270,24 @@ class DatabaseService {
     return await db.insert(contactosTable, contacto.toMap());
   }
 
-  Future<List<Contacto>> getContactos(int idUsuario) async {
+  Future<List<Contacto>> getContactos(String userId) async {
     final db = await database;
+
+    // Use cached schema info to avoid repeated PRAGMA queries
+    final hasOldColumn = await _hasOldUserIdColumn(db, contactosTable);
+
+    String whereClause = 'user_id = ?';
+    List<dynamic> whereArgs = [userId];
+
+    if (hasOldColumn) {
+      whereClause = 'user_id = ? OR id_usuario = ?';
+      whereArgs = [userId, userId];
+    }
+
     final List<Map<String, dynamic>> maps = await db.query(
       contactosTable,
-      where: 'id_usuario = ?',
-      whereArgs: [idUsuario],
+      where: whereClause,
+      whereArgs: whereArgs,
       orderBy: 'nombre ASC',
     );
 
@@ -1177,5 +1492,47 @@ class DatabaseService {
     }
 
     return csvFiles;
+  }
+
+  /// Cached method to check if a table has the old id_usuario column
+  /// This avoids repeated PRAGMA queries for better performance
+  Future<bool> _hasOldUserIdColumn(sql.Database db, String tableName) async {
+    if (_tableHasOldUserIdColumn.containsKey(tableName)) {
+      return _tableHasOldUserIdColumn[tableName]!;
+    }
+
+    try {
+      final tableInfo = await db.rawQuery('PRAGMA table_info($tableName)');
+      final hasOldColumn = tableInfo.any(
+        (column) => column['name'] == 'id_usuario',
+      );
+      _tableHasOldUserIdColumn[tableName] = hasOldColumn;
+      return hasOldColumn;
+    } catch (e) {
+      // If there's an error, assume no old column exists
+      _tableHasOldUserIdColumn[tableName] = false;
+      return false;
+    }
+  }
+
+  /// Syncs accounts from Firestore to local SQLite
+  Future<void> _syncAccountsToLocal(List<Account> accounts) async {
+    final db = await database;
+
+    try {
+      // Clear existing accounts for this user and insert the Firestore ones
+      for (final account in accounts) {
+        await db.insert(
+          accountsTable,
+          account.toMap(),
+          conflictAlgorithm: sql.ConflictAlgorithm.replace,
+        );
+      }
+      print(
+        'DatabaseService: Synced ${accounts.length} accounts to local SQLite',
+      );
+    } catch (e) {
+      print('DatabaseService: Error syncing accounts to local: $e');
+    }
   }
 }

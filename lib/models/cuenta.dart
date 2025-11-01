@@ -9,7 +9,8 @@ enum TipoCuenta {
 
 class Cuenta {
   final int idCuenta;
-  final int idUsuario;
+  final String
+  userId; // Changed from int idUsuario to String userId (Firebase UID)
   final String nombre;
   final TipoCuenta tipo;
   final String? numeroCuenta;
@@ -23,7 +24,7 @@ class Cuenta {
 
   Cuenta({
     required this.idCuenta,
-    required this.idUsuario,
+    required this.userId,
     required this.nombre,
     required this.tipo,
     this.numeroCuenta,
@@ -38,7 +39,7 @@ class Cuenta {
 
   Cuenta copyWith({
     int? idCuenta,
-    int? idUsuario,
+    String? userId,
     String? nombre,
     TipoCuenta? tipo,
     String? numeroCuenta,
@@ -52,7 +53,7 @@ class Cuenta {
   }) {
     return Cuenta(
       idCuenta: idCuenta ?? this.idCuenta,
-      idUsuario: idUsuario ?? this.idUsuario,
+      userId: userId ?? this.userId,
       nombre: nombre ?? this.nombre,
       tipo: tipo ?? this.tipo,
       numeroCuenta: numeroCuenta ?? this.numeroCuenta,
@@ -69,7 +70,7 @@ class Cuenta {
   Map<String, dynamic> toMap() {
     return {
       'id_cuenta': idCuenta,
-      'id_usuario': idUsuario,
+      'user_id': userId, // Changed field name to user_id for consistency
       'nombre': nombre,
       'tipo': tipo.name,
       'numero_cuenta': numeroCuenta,
@@ -86,7 +87,9 @@ class Cuenta {
   factory Cuenta.fromMap(Map<String, dynamic> map) {
     return Cuenta(
       idCuenta: map['id_cuenta'],
-      idUsuario: map['id_usuario'],
+      userId:
+          map['user_id'] ??
+          map['id_usuario'], // Support both old and new field names for migration
       nombre: map['nombre'],
       tipo: TipoCuenta.values.firstWhere(
         (tipo) => tipo.name == map['tipo'],

@@ -321,7 +321,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   controller: _descriptionController,
                   focusNode: _descriptionFocus,
                   decoration: InputDecoration(
-                    labelText: 'Descripción',
+                    labelText: 'Descripción *',
                     hintText: '¿En qué gastaste?',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -503,9 +503,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         userId: currentUser.id, // This is the Firebase UID (String)
         type: _transactionType!, // Now safe to use !
         amount: amount,
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
+        description: _descriptionController.text.trim(),
         category: _categoryController.text.trim().isEmpty
             ? null
             : _categoryController.text.trim(),

@@ -404,10 +404,7 @@ class _MovimientosScreenState extends State<MovimientosScreen> {
     try {
       final contactos = await _databaseService.getContactos(
         // Removed the extra `await`
-        (await _databaseService.getUsuarioByEmail(
-              currentUser.email,
-            ))?.idUsuario ??
-            0,
+        currentUser.id, // Use Firebase UID directly
       );
 
       showDialog(

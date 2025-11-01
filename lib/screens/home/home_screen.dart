@@ -109,11 +109,19 @@ class _HomeScreenState extends State<HomeScreen> {
       body: currentUser == null
           ? const Center(child: CircularProgressIndicator())
           : _buildBody(currentUser),
+      floatingActionButton: currentUser != null
+          ? FloatingActionButton(
+              onPressed: _showAddTransactionSheet,
+              backgroundColor: Colors.deepPurple,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
     );
   }
 
   Future<void> _loadData() async {
     if (!mounted) return;
+    print('HomeScreen: _loadData() called');
     setState(() => _isLoading = true);
 
     try {
@@ -137,36 +145,54 @@ class _HomeScreenState extends State<HomeScreen> {
       if (currentUser == null) throw Exception("Usuario no encontrado");
 
       // Fetch all accounts and then filter by the current display mode
+      print('HomeScreen: Fetching accounts for user ${currentUser.id}');
       final allAccounts = await dbService.getAccounts(currentUser.id);
+      print('HomeScreen: Found ${allAccounts.length} accounts');
+
       final accounts = _displayMode == 'all'
           ? allAccounts
           : allAccounts.where((acc) => acc.moneda == _activeCurrency).toList();
 
+      print(
+        'HomeScreen: Filtered to ${accounts.length} accounts for display mode $_displayMode',
+      );
+
       final balances = await _calculateBalances(accounts);
       _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(accounts);
+
+      print('HomeScreen: Calculated balances: $balances');
+      print(
+        'HomeScreen: Total balances by currency: $_totalBalancesByCurrency',
+      );
 
       // Fetch daily transactions
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
 
-      // Fetch data that depends on localId only if it's valid
+      // Fetch daily transactions from Firestore
+      print(
+        'HomeScreen: Fetching daily transactions from $startOfDay to $endOfDay',
+      );
       final dailyTransactions = await dbService.getTransactions(
         userId: currentUser.id,
         fromDate: startOfDay,
         toDate: endOfDay,
       );
+      print(
+        'HomeScreen: Fetched ${dailyTransactions.length} daily transactions',
+      );
 
       List<String> topExpenses = [];
       List<String> topIncomes = [];
 
-      if (currentUser.localId != null && currentUser.localId! > 0) {
+      if (currentUser.id.isNotEmpty) {
         topExpenses = await dbService.getTopTransactionDescriptions(
-          currentUser.localId!,
+          currentUser.id, // Use Firebase UID directly
           tx.TipoTransaccion.gasto,
         );
         topIncomes = await dbService.getTopTransactionDescriptions(
-          currentUser.localId!,
+          currentUser.id, // Use Firebase UID directly
           tx.TipoTransaccion.ingreso,
         );
       } else {
@@ -705,6 +731,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (currentUser == null) return;
 
     try {
+      print(
+        'HomeScreen: Fetching transactions for account ${account.name} (${account.id})',
+      );
+
       // Fetch transactions directly using the new Firestore-based system
       final List<new_tx.Transaction> transactions = await dbService
           .getTransactionsForAccount(
@@ -717,6 +747,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             toDate: DateTime.now(),
           );
+
+      print(
+        'HomeScreen: Found ${transactions.length} transactions for account ${account.name}',
+      );
 
       if (!mounted) return;
 
@@ -800,13 +834,25 @@ class _HomeScreenState extends State<HomeScreen> {
     double totalIngresos = 0;
     double totalEgresos = 0;
 
+    print(
+      'HomeScreen: _buildDailySummarySection - Processing ${_dailyTransactions.length} daily transactions',
+    );
+
     for (var transaction in _dailyTransactions) {
+      print(
+        'HomeScreen: Transaction - Type: ${transaction.type.name}, Amount: ${transaction.amount}, Description: ${transaction.description}',
+      );
+
       if (transaction.type == new_tx.TransactionType.income) {
         totalIngresos += transaction.amount;
       } else {
         totalEgresos += transaction.amount;
       }
     }
+
+    print(
+      'HomeScreen: Daily Summary - Total Ingresos: $totalIngresos, Total Egresos: $totalEgresos',
+    );
 
     return InkWell(
       onTap: () => _showDailyTransactionsDetail(),
@@ -1377,7 +1423,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: TextFormField(
               controller: _quickAddDescriptionController,
               decoration: InputDecoration(
-                labelText: 'Descripción (opcional)',
+                labelText: 'Descripción',
                 prefixIcon: const Icon(Icons.description),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1385,6 +1431,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               textCapitalization: TextCapitalization.sentences,
               inputFormatters: [LengthLimitingTextInputFormatter(100)],
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'La descripción es obligatoria';
+                }
+                return null;
+              },
             ),
           ),
           const SizedBox(height: 16),
@@ -1484,10 +1536,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.user;
     if (currentUser == null) return;
-    // Use the correct localId (integer) to query the old transactions table
-    if (currentUser.localId == null || currentUser.localId == 0) return;
+    // Use Firebase UID to query transactions
+    if (currentUser.id.isEmpty) return;
 
-    final transactions = await dbService.getTransacciones(currentUser.localId!);
+    // Use the NEW transaction system that reads from Firestore
+    final transactions = await dbService.getTransactions(
+      userId: currentUser.id,
+    );
 
     if (transactions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1516,6 +1571,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _saveQuickTransaction() async {
     if (!_quickAddFormKey.currentState!.validate()) return;
 
+    print('HomeScreen: _saveQuickTransaction() called');
     setState(() => _isSavingQuickTransaction = true);
 
     try {
@@ -1527,6 +1583,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final location = await _getCurrentLocation();
 
       final amount = double.parse(_quickAddAmountController.text);
+      print(
+        'HomeScreen: Creating transaction - Amount: $amount, Account: ${_quickAddSelectedAccount!.id}',
+      );
 
       // --- NEW MODEL IMPLEMENTATION ---
       // Create a new transaction using the Firestore-compatible model
@@ -1556,33 +1615,58 @@ class _HomeScreenState extends State<HomeScreen> {
         updatedAt: DateTime.now(),
       );
 
+      print('HomeScreen: Saving transaction to database...');
       // 1. Save the new transaction to Firestore
       await dbService.insertNewTransaction(newTransaction);
+      print('HomeScreen: Transaction saved successfully');
 
+      print('HomeScreen: Updating local UI state...');
       // 2. Update local state without a full reload to avoid screen flickering
       final accountIndex = _accounts.indexWhere(
         (acc) => acc.id == newTransaction.accountId,
       );
       if (accountIndex != -1) {
-        final oldAccount = _accounts[accountIndex];
-        final newBalance = newTransaction.type == new_tx.TransactionType.income
-            ? oldAccount.currentBalance + newTransaction.amount
-            : oldAccount.currentBalance - newTransaction.amount;
-
-        // Update the specific account in the list
-        _accounts[accountIndex] = oldAccount.copyWith(
-          currentBalance: newBalance,
+        // Get the updated account from database to ensure we have the latest balance
+        final updatedAccount = await dbService.getAccount(
+          newTransaction.accountId!,
         );
+        if (updatedAccount != null) {
+          print(
+            'HomeScreen: Found updated account, new balance from DB: ${updatedAccount.currentBalance}',
+          );
 
-        // Recalculate total balances and daily limit
-        _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(_accounts);
-        _dailyLimit = _calculateDailyLimit(
-          _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
+          // Update the specific account in the list with the database value
+          _accounts[accountIndex] = updatedAccount;
+
+          // Recalculate balances using the updated accounts
+          _accountBalances = await _calculateBalances(_accounts);
+          _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(
+            _accounts,
+          );
+          _dailyLimit = _calculateDailyLimit(
+            _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
+          );
+
+          print('HomeScreen: Updated account balances: $_accountBalances');
+          print(
+            'HomeScreen: Updated total balances: $_totalBalancesByCurrency',
+          );
+        } else {
+          print(
+            'HomeScreen: ERROR - Could not fetch updated account from database',
+          );
+        }
+      } else {
+        print(
+          'HomeScreen: ERROR - Account not found in local list: ${newTransaction.accountId}',
         );
       }
 
       // Add the new transaction to the daily list
       _dailyTransactions.insert(0, newTransaction);
+      print(
+        'HomeScreen: Added transaction to daily list, total daily transactions: ${_dailyTransactions.length}',
+      );
 
       // 3. Reset form and trigger a single UI update
       setState(() {
@@ -1593,7 +1677,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _showExtraQuickAddFields = false;
         // The state variables for balances are already updated above
       });
+
+      print('HomeScreen: UI state updated successfully');
     } catch (e) {
+      print('HomeScreen: ERROR saving transaction: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al guardar: $e'),
@@ -1640,6 +1727,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showAddTransactionSheet() async {
+    print('HomeScreen: Opening AddTransactionScreen sheet');
+
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true, // Permite que el sheet ocupe más pantalla
@@ -1652,9 +1741,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
+    print('HomeScreen: AddTransactionScreen closed with result: $result');
+
     // Refresca los datos solo si la transacción fue exitosa
     if (result == true) {
-      _loadData();
+      print('HomeScreen: Transaction was successful, reloading data...');
+      await _loadData();
+      print('HomeScreen: Data reloaded successfully');
     }
   }
 
@@ -1700,8 +1793,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<Map<String, double>> _calculateBalances(List<Account> accounts) async {
     final Map<String, double> balances = {};
     for (final account in accounts) {
-      // Aquí se podría llamar a un método que calcule el saldo real si es necesario
-      balances[account.id] = account.currentBalance;
+      // Get the most up-to-date account data from database
+      final updatedAccount = await dbService.getAccount(account.id);
+      balances[account.id] =
+          updatedAccount?.currentBalance ?? account.currentBalance;
+      print('HomeScreen: Balance for ${account.name}: ${balances[account.id]}');
     }
     return balances;
   }
@@ -1776,12 +1872,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final dbService = DatabaseService();
       // FIX: Use the local integer ID for the old database schema.
-      // Do not parse the Firebase UID.
-      final userIdInt = currentUser.localId;
-      if (userIdInt == null || userIdInt == 0) return 0.0;
+      // Use Firebase UID directly
+      final userId = currentUser.id;
+      if (userId.isEmpty) return 0.0;
 
       final List<GastoFijo> fixedExpenses = await dbService.getGastosFijos(
-        userIdInt,
+        userId,
       );
       // For now, return 0.0 since we need to fix the user model integration
       double totalFixedExpenses = 0.0;

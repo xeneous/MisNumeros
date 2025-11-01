@@ -76,6 +76,12 @@ class AuthProvider with ChangeNotifier {
       final localId = await _dbService.getOrCreateOldUserId(_user!);
       print('AuthProvider: ID numérico local obtenido: $localId');
 
+      // CRITICAL: Migrate existing data from local ID to Firebase UID
+      await _dbService.migrateUserDataToFirebaseUID(_user!.id, localId);
+      print(
+        'AuthProvider: Data migrated from local ID $localId to Firebase UID ${_user!.id}',
+      );
+
       // Asegurarse de que el objeto User en el provider y en Firestore tengan el ID local.
       if (_user?.localId != localId) {
         _user = _user!.copyWith(localId: localId);

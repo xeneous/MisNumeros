@@ -272,7 +272,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         final oldUserId = await dbService.getOrCreateOldUserId(currentUser);
         final oldAccounts = await dbService.findOldAccountByName(
           updatedAccount.name,
-          oldUserId,
+          oldUserId.toString(),
         );
         if (oldAccounts.isNotEmpty) {
           final oldAccountToUpdate = oldAccounts.first.copyWith(
@@ -315,7 +315,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         // This should be removed after the transactions table migration.
         final oldAccount = old_account.Cuenta(
           idCuenta: 0, // autoincremento
-          idUsuario: await dbService.getOrCreateOldUserId(currentUser),
+          userId: currentUser.id, // Use Firebase UID directly
           nombre: newAccount.name,
           // Mapeo manual para corregir la discrepancia de enums
           moneda: newAccount.moneda,

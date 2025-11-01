@@ -35,7 +35,7 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
       try {
         final dbService = DatabaseService();
         final expenses = await dbService.getGastosFijos(
-          int.parse(currentUser.id),
+          currentUser.id, // Use Firebase UID directly as string
         ); // Fetch real data
 
         // Calcular totales

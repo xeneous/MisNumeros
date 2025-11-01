@@ -18,7 +18,8 @@ enum MetodoPago {
 
 class Transaccion {
   final String idTransaccion;
-  final int idUsuario;
+  final String
+  userId; // Changed from int idUsuario to String userId (Firebase UID)
   final int idCuenta;
   final int idCategoria;
   final int
@@ -38,7 +39,7 @@ class Transaccion {
 
   Transaccion({
     required this.idTransaccion,
-    required this.idUsuario,
+    required this.userId,
     required this.idCuenta,
     required this.idCategoria,
     required this.tipoMovimiento,
@@ -58,7 +59,7 @@ class Transaccion {
 
   Transaccion copyWith({
     String? idTransaccion,
-    int? idUsuario,
+    String? userId,
     int? idCuenta,
     int? idCategoria,
     int? tipoMovimiento,
@@ -77,7 +78,7 @@ class Transaccion {
   }) {
     return Transaccion(
       idTransaccion: idTransaccion ?? this.idTransaccion,
-      idUsuario: idUsuario ?? this.idUsuario,
+      userId: userId ?? this.userId,
       idCuenta: idCuenta ?? this.idCuenta,
       idCategoria: idCategoria ?? this.idCategoria,
       tipoMovimiento: tipoMovimiento ?? this.tipoMovimiento,
@@ -99,7 +100,7 @@ class Transaccion {
   Map<String, dynamic> toMap() {
     return {
       'id_transaccion': idTransaccion,
-      'id_usuario': idUsuario,
+      'user_id': userId, // Changed field name to user_id for consistency
       'id_cuenta': idCuenta,
       'id_categoria': idCategoria,
       'tipo_movimiento': tipoMovimiento,
@@ -121,7 +122,9 @@ class Transaccion {
   factory Transaccion.fromMap(Map<String, dynamic> map) {
     return Transaccion(
       idTransaccion: map['id_transaccion'],
-      idUsuario: map['id_usuario'],
+      userId:
+          map['user_id'] ??
+          map['id_usuario'], // Support both old and new field names for migration
       idCuenta: map['id_cuenta'],
       idCategoria: map['id_categoria'],
       tipoMovimiento:
