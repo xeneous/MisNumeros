@@ -207,8 +207,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
       );
 
-      // TODO: Implementar getProximosGastos en DatabaseService (still hardcoded for now)
-      final proximosGastos = _getHardcodedProximosGastos();
+      // Get real próximos gastos from database
+      final proximosGastos = await dbService.getProximosGastos(currentUser.id);
+      print('HomeScreen: Found ${proximosGastos.length} próximos gastos');
 
       // No need for Future.wait here as we await individually
       // final results = await Future.wait([accountsFuture, proximosGastosFuture]);
@@ -1761,15 +1762,136 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _toggleGastoPagado(int index, bool value) {
-    setState(() {
-      _proximosGastos[index] = _proximosGastos[index].copyWith(
-        estado: (value ?? false)
-            ? EstadoProximoGasto.pagado
-            : EstadoProximoGasto.pendiente,
+  void _toggleGastoPagado(int index, bool value) async {
+    if (value == true) {
+      // When marking as paid, show account selection dialog
+      await _showAccountSelectionForExpense(index);
+    } else {
+      // When unmarking, just update the state
+      setState(() {
+        _proximosGastos[index] = _proximosGastos[index].copyWith(
+          estado: EstadoProximoGasto.pendiente,
+        );
+      });
+    }
+  }
+
+  Future<void> _showAccountSelectionForExpense(int gastoIndex) async {
+    final gasto = _proximosGastos[gastoIndex];
+
+    if (_accounts.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay cuentas disponibles. Crea una cuenta primero.'),
+          backgroundColor: Colors.orange,
+        ),
       );
-      // TODO: Persistir el cambio en la base de datos
-    });
+      return;
+    }
+
+    // Find default account or use first available
+    Account? selectedAccount =
+        _accounts.where((acc) => acc.isDefault).firstOrNull ?? _accounts.first;
+
+    final result = await showDialog<Account>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Pagar: ${gasto.detalle}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Monto: ${_formatFinancialValue(gasto.importe)}'),
+            const SizedBox(height: 16),
+            const Text('Selecciona la cuenta:'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<Account>(
+              value: selectedAccount,
+              items: _accounts.map((account) {
+                return DropdownMenuItem<Account>(
+                  value: account,
+                  child: Text(
+                    '${account.name} (${_formatFinancialValue(account.currentBalance)})',
+                  ),
+                );
+              }).toList(),
+              onChanged: (Account? newValue) {
+                selectedAccount = newValue;
+              },
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(selectedAccount),
+            child: const Text('Pagar'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      await _processExpensePayment(gastoIndex, result);
+    }
+  }
+
+  Future<void> _processExpensePayment(
+    int gastoIndex,
+    Account selectedAccount,
+  ) async {
+    final gasto = _proximosGastos[gastoIndex];
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.user;
+
+    if (currentUser == null) return;
+
+    try {
+      // Create a transaction for this expense payment
+      final newTransaction = new_tx.Transaction(
+        id: const Uuid().v4(),
+        userId: currentUser.id,
+        accountId: selectedAccount.id,
+        type: new_tx.TransactionType.expense,
+        amount: gasto.importe,
+        description: 'Pago: ${gasto.detalle}',
+        category: 'Gasto Fijo',
+        date: DateTime.now(),
+        currency: selectedAccount.moneda,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Save the transaction
+      await dbService.insertNewTransaction(newTransaction);
+
+      // Update the gasto as paid
+      setState(() {
+        _proximosGastos[gastoIndex] = _proximosGastos[gastoIndex].copyWith(
+          estado: EstadoProximoGasto.pagado,
+        );
+      });
+
+      // Reload data to refresh balances
+      await _loadData();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gasto pagado: ${gasto.detalle}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al procesar pago: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   String _getShortMonthName(int month) {
@@ -1802,31 +1924,68 @@ class _HomeScreenState extends State<HomeScreen> {
     return balances;
   }
 
-  // Temporal: Datos hardcodeados hasta que se implemente en el servicio
-  List<ProximoGasto> _getHardcodedProximosGastos() {
-    return [
-      ProximoGasto(
-        idObligacion: 1,
-        idGasto: 1,
-        montoEstimado: 2500.00,
-        fechaVencimiento: DateTime.now().add(const Duration(days: 3)),
-        estado: EstadoProximoGasto.pendiente,
-      ),
-      ProximoGasto(
-        idObligacion: 2,
-        idGasto: 2,
-        montoEstimado: 8500.00,
-        fechaVencimiento: DateTime.now().add(const Duration(days: 7)),
-        estado: EstadoProximoGasto.pendiente,
-      ),
-      ProximoGasto(
-        idObligacion: 3,
-        idGasto: 3,
-        montoEstimado: 12500.00,
-        fechaVencimiento: DateTime.now().add(const Duration(days: 15)),
-        estado: EstadoProximoGasto.pagado,
-      ),
-    ];
+  // Generate próximos gastos from fixed expenses
+  Future<List<ProximoGasto>> _generateProximosGastosFromFixed(
+    String userId,
+  ) async {
+    final gastosFijos = await dbService.getGastosFijos(userId);
+    final List<ProximoGasto> proximosGastos = [];
+
+    for (final gastoFijo in gastosFijos) {
+      if (!gastoFijo.activo) continue;
+
+      // Calculate next due date based on frequency
+      DateTime nextDueDate = _calculateNextDueDate(gastoFijo);
+
+      // Only show if due within next 30 days
+      if (nextDueDate.isBefore(DateTime.now().add(const Duration(days: 30)))) {
+        proximosGastos.add(
+          ProximoGasto(
+            idObligacion: gastoFijo.idGasto,
+            idGasto: gastoFijo.idGasto,
+            montoEstimado: gastoFijo.montoCuotas,
+            fechaVencimiento: nextDueDate,
+            estado: EstadoProximoGasto.pendiente,
+          ),
+        );
+      }
+    }
+
+    // Sort by due date
+    proximosGastos.sort(
+      (a, b) => a.fechaVencimiento.compareTo(b.fechaVencimiento),
+    );
+
+    return proximosGastos;
+  }
+
+  DateTime _calculateNextDueDate(GastoFijo gastoFijo) {
+    final now = DateTime.now();
+
+    if (gastoFijo.frecuencia == 'MENSUAL') {
+      final targetDay = gastoFijo.diaMes ?? 1;
+      var nextDate = DateTime(now.year, now.month, targetDay);
+
+      // If the date has passed this month, move to next month
+      if (nextDate.isBefore(now)) {
+        nextDate = DateTime(now.year, now.month + 1, targetDay);
+      }
+
+      return nextDate;
+    } else if (gastoFijo.frecuencia == 'SEMANAL') {
+      final targetWeekday = gastoFijo.diaSemana ?? 1;
+      var nextDate = now;
+
+      // Find next occurrence of the target weekday
+      while (nextDate.weekday != targetWeekday) {
+        nextDate = nextDate.add(const Duration(days: 1));
+      }
+
+      return nextDate;
+    }
+
+    // Default: next week
+    return now.add(const Duration(days: 7));
   }
 
   // Función para formatear valores financieros con opción de privacidad

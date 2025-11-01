@@ -668,13 +668,22 @@ class DatabaseService {
     final db = await database;
 
     // Save to both SQLite local and Firestore for persistence
-    await _firestore
-        .collection('accounts')
-        .doc(account.id)
-        .set(account.toMap());
-    print('DatabaseService: Account saved to Firestore: ${account.name}');
+    try {
+      await _firestore
+          .collection('accounts')
+          .doc(account.id)
+          .set(account.toMap());
+      print('DatabaseService: Account saved to Firestore: ${account.name}');
+    } catch (e) {
+      print('DatabaseService: Error saving account to Firestore: $e');
+    }
 
-    return await db.insert(accountsTable, account.toMap());
+    // Use REPLACE to avoid primary key constraint errors
+    return await db.insert(
+      accountsTable,
+      account.toMap(),
+      conflictAlgorithm: sql.ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Account>> getAccounts(String userId) async {
@@ -1533,6 +1542,26 @@ class DatabaseService {
       );
     } catch (e) {
       print('DatabaseService: Error syncing accounts to local: $e');
+    }
+  }
+
+  /// Syncs fixed expenses from Firestore to local SQLite
+  Future<void> _syncFixedExpensesToLocal(List<GastoFijo> expenses) async {
+    final db = await database;
+
+    try {
+      for (final expense in expenses) {
+        await db.insert(
+          gastosFijosTable,
+          expense.toMap(),
+          conflictAlgorithm: sql.ConflictAlgorithm.replace,
+        );
+      }
+      print(
+        'DatabaseService: Synced ${expenses.length} fixed expenses to local SQLite',
+      );
+    } catch (e) {
+      print('DatabaseService: Error syncing fixed expenses to local: $e');
     }
   }
 }
