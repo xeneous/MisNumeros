@@ -704,77 +704,96 @@ class _HomeScreenState extends State<HomeScreen> {
     final currentUser = authProvider.user;
     if (currentUser == null) return;
 
-    // --- TEMPORARY BRIDGE ---
-    // Find the old account ID to fetch transactions from the old table structure.
-    final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
-    if (oldUser == null) return;
+    try {
+      // Fetch transactions directly using the new Firestore-based system
+      final List<new_tx.Transaction> transactions = await dbService
+          .getTransactionsForAccount(
+            userId: currentUser.id,
+            accountId: account.id,
+            fromDate: DateTime(
+              DateTime.now().year,
+              DateTime.now().month,
+              DateTime.now().day,
+            ),
+            toDate: DateTime.now(),
+          );
 
-    final oldAccounts = await dbService.findOldAccountByName(
-      account.name,
-      oldUser.idUsuario,
-    );
-    if (oldAccounts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se encontró la cuenta correspondiente.'),
-          backgroundColor: Colors.orange,
+      if (!mounted) return;
+
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-      );
-      return;
-    }
-    final oldAccountId = oldAccounts.first.idCuenta;
-    // --- END OF BRIDGE ---
-
-    // Fetch transactions using the new model and correct IDs
-    final transactions = await dbService.getTransactionsForAccount(
-      userId: currentUser.id, // Use Firebase UID
-      accountId: account.id, // Use new Account ID
-      // Por defecto, muestra los de hoy. Se podrá cambiar en el futuro.
-      fromDate: DateTime(
-        DateTime.now().year,
-        DateTime.now().month,
-        DateTime.now().day,
-      ),
-      toDate: DateTime.now(),
-    );
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.6,
-          maxChildSize: 0.9,
-          minChildSize: 0.3,
-          builder: (context, scrollController) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'Movimientos de ${account.name}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+        builder: (context) {
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.6,
+            maxChildSize: 0.9,
+            minChildSize: 0.3,
+            builder: (context, scrollController) {
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      'Movimientos de ${account.name}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: transactions.isEmpty
-                      ? const Center(
-                          child: Text('No hay movimientos para esta cuenta.'),
-                        )
-                      : _buildTransactionList(transactions, scrollController),
-                ),
-              ],
-            );
-          },
+                  Expanded(
+                    child: transactions.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.receipt_long_outlined,
+                                  size: 64,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No hay movimientos para esta cuenta hoy.',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Los movimientos aparecerán aquí cuando realices transacciones.',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[500],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        : _buildTransactionList(transactions, scrollController),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar movimientos: $e'),
+            backgroundColor: Colors.orange,
+          ),
         );
-      },
-    );
+      }
+    }
   }
 
   Widget _buildDailySummarySection() {
@@ -1465,11 +1484,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.user;
     if (currentUser == null) return;
+    // Use the correct localId (integer) to query the old transactions table
+    if (currentUser.localId == null || currentUser.localId == 0) return;
 
-    final oldUser = await dbService.getUsuarioByEmail(currentUser.email);
-    if (oldUser == null) return;
-
-    final transactions = await dbService.getTransacciones(oldUser.idUsuario);
+    final transactions = await dbService.getTransacciones(currentUser.localId!);
 
     if (transactions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1516,7 +1534,11 @@ class _HomeScreenState extends State<HomeScreen> {
         id: const Uuid().v4(),
         userId: currentUser.id, // Use the Firebase UID (String)
         accountId: _quickAddSelectedAccount!.id,
-        type: _quickAddTransactionType == tx.TipoTransaccion.gasto
+        type:
+            _quickAddTransactionType ==
+                tx
+                    .TipoTransaccion
+                    .gasto // Use the old enum for comparison
             ? new_tx.TransactionType.expense
             : new_tx.TransactionType.income,
         amount: amount,
