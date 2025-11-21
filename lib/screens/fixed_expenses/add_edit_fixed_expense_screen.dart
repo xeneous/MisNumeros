@@ -580,8 +580,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
           updatedAt: DateTime.now(),
         );
 
-        // TODO: Update for new GastoFijo model
-        // await dbService.updateGastoFijo(updatedExpense);
+        await dbService.updateFixedExpenseNew(updatedExpense);
       } else {
         // Create new expense
         final newExpense = FixedExpense(
@@ -606,8 +605,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
           updatedAt: DateTime.now(),
         );
 
-        // TODO: Update for new GastoFijo model
-        // await dbService.insertGastoFijo(newExpense);
+        await dbService.insertFixedExpenseNew(newExpense);
       }
 
       if (mounted) {

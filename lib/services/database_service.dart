@@ -11,6 +11,7 @@ import '../models/transaccion.dart'; // Import the new Transaccion model
 import '../models/cuenta.dart';
 import '../models/categoria.dart';
 import '../models/gasto_fijo.dart';
+import '../models/fixed_expense.dart'; // Import the new FixedExpense model
 import '../models/proximo_gasto.dart';
 import '../models/transaction.dart' as new_tx;
 import '../models/contacto.dart';
@@ -1207,6 +1208,183 @@ class DatabaseService {
       where: 'id_gasto = ?',
       whereArgs: [idGasto],
     );
+  }
+
+  // New FixedExpense operations (bridge to GastoFijo)
+  Future<void> insertFixedExpenseNew(FixedExpense fixedExpense) async {
+    try {
+      print(
+        'DatabaseService: Starting to insert fixed expense: ${fixedExpense.name}',
+      );
+
+      // Convert FixedExpense to GastoFijo for database storage
+      final gastoFijo = await _convertFixedExpenseToGastoFijo(fixedExpense);
+
+      print(
+        'DatabaseService: Converted to GastoFijo - Account ID: ${gastoFijo.idCuenta}, Category ID: ${gastoFijo.idCategoria}',
+      );
+
+      final result = await insertGastoFijo(gastoFijo);
+
+      print(
+        'DatabaseService: Fixed expense inserted successfully with ID: $result',
+      );
+    } catch (e) {
+      print('DatabaseService: Error inserting fixed expense: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateFixedExpenseNew(FixedExpense fixedExpense) async {
+    // Convert FixedExpense to GastoFijo for database storage
+    final gastoFijo = await _convertFixedExpenseToGastoFijo(fixedExpense);
+    await updateGastoFijo(gastoFijo);
+  }
+
+  Future<List<FixedExpense>> getFixedExpensesNew(String userId) async {
+    final gastosFijos = await getGastosFijos(userId);
+    final List<FixedExpense> fixedExpenses = [];
+
+    for (final gastoFijo in gastosFijos) {
+      final fixedExpense = await _convertGastoFijoToFixedExpense(gastoFijo);
+      if (fixedExpense != null) {
+        fixedExpenses.add(fixedExpense);
+      }
+    }
+
+    return fixedExpenses;
+  }
+
+  // Helper method to convert FixedExpense to GastoFijo
+  Future<GastoFijo> _convertFixedExpenseToGastoFijo(
+    FixedExpense fixedExpense,
+  ) async {
+    // Ensure we have valid account and category IDs
+    int accountId = await _ensureDefaultAccount(fixedExpense.userId);
+    int categoryId = await _ensureDefaultCategory(fixedExpense.userId);
+
+    print(
+      'DatabaseService: Using Account ID: $accountId, Category ID: $categoryId',
+    );
+
+    return GastoFijo(
+      idGasto: 0, // Will be auto-incremented
+      userId: fixedExpense.userId,
+      idCuenta: accountId,
+      idCategoria: categoryId,
+      nombre: fixedExpense.name,
+      descripcion: fixedExpense.description,
+      montoTotal: fixedExpense.amount,
+      cuotas: null,
+      montoCuotas: fixedExpense.amount,
+      frecuencia: fixedExpense.frequency == ExpenseFrequency.monthly
+          ? 'MENSUAL'
+          : 'SEMANAL',
+      diaSemana: fixedExpense.frequency == ExpenseFrequency.weekly
+          ? fixedExpense.dayOfWeek
+          : null,
+      diaMes: fixedExpense.frequency == ExpenseFrequency.monthly
+          ? fixedExpense.dayOfMonth
+          : null,
+      fechaInicio: fixedExpense.createdAt,
+      fechaFin: null,
+      activo: fixedExpense.isActive,
+      recordatorioDias: 3,
+    );
+  }
+
+  // Helper method to convert GastoFijo to FixedExpense
+  Future<FixedExpense?> _convertGastoFijoToFixedExpense(
+    GastoFijo gastoFijo,
+  ) async {
+    try {
+      return FixedExpense(
+        id: gastoFijo.idGasto.toString(),
+        userId: gastoFijo.userId,
+        name: gastoFijo.nombre,
+        description: gastoFijo.descripcion,
+        amount: gastoFijo.montoCuotas,
+        frequency: gastoFijo.frecuencia == 'MENSUAL'
+            ? ExpenseFrequency.monthly
+            : ExpenseFrequency.weekly,
+        paymentType: PaymentType.onDay, // Default value
+        dayOfMonth: gastoFijo.diaMes ?? 1,
+        dayOfWeek: gastoFijo.diaSemana ?? 1,
+        category: 'Otros', // Default category name
+        accountId: null, // Not mapped for now
+        isActive: gastoFijo.activo,
+        createdAt: gastoFijo.fechaInicio,
+        updatedAt: gastoFijo.fechaInicio,
+        lastPaymentDate: null,
+      );
+    } catch (e) {
+      print('Error converting GastoFijo to FixedExpense: $e');
+      return null;
+    }
+  }
+
+  // Helper method to ensure a default account exists
+  Future<int> _ensureDefaultAccount(String userId) async {
+    try {
+      final accounts = await getCuentas(userId);
+      if (accounts.isNotEmpty) {
+        return accounts.first.idCuenta;
+      }
+
+      // Create a default account if none exists
+      final defaultAccount = Cuenta(
+        idCuenta: 0, // Will be auto-incremented
+        userId: userId,
+        nombre: 'Cuenta por defecto',
+        tipo: TipoCuenta.efectivo,
+        numeroCuenta: null,
+        bancoEntidad: null,
+        moneda: 'ARS',
+        colorHex: '#2196F3',
+        icono: 'credit_card',
+        fechaCreacion: DateTime.now(),
+        activa: true,
+        esPrincipal: true,
+      );
+
+      final accountId = await insertCuenta(defaultAccount);
+      print('DatabaseService: Created default account with ID: $accountId');
+      return accountId;
+    } catch (e) {
+      print('DatabaseService: Error ensuring default account: $e');
+      return 1; // Fallback to ID 1
+    }
+  }
+
+  // Helper method to ensure a default category exists
+  Future<int> _ensureDefaultCategory(String userId) async {
+    try {
+      final categories = await getCategorias(userId);
+      if (categories.isNotEmpty) {
+        return categories.first.idCategoria;
+      }
+
+      // Create a default category if none exists
+      final defaultCategory = Categoria(
+        idCategoria: 0, // Will be auto-incremented
+        userId: userId,
+        nombre: 'Gastos Fijos',
+        tipo: TipoCategoria.gasto,
+        colorHex: '#6B73FF',
+        icono: 'category',
+        descripcion: 'Categoría por defecto para gastos fijos',
+        padreId: null,
+        fechaCreacion: DateTime.now(),
+        activa: true,
+      );
+
+      final categoryId = await insertCategoria(defaultCategory);
+      print('DatabaseService: Created default category with ID: $categoryId');
+      return categoryId;
+    } catch (e) {
+      print('DatabaseService: Error ensuring default category: $e');
+      return 1; // Fallback to ID 1
+    }
   }
 
   // ProximoGasto operations
