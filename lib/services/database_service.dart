@@ -1162,9 +1162,11 @@ class DatabaseService {
 
   Future<List<GastoFijo>> getGastosFijos(String userId) async {
     final db = await database;
+    print('DatabaseService: getGastosFijos called for userId: $userId');
 
     // Use cached schema info to avoid repeated PRAGMA queries
     final hasOldColumn = await _hasOldUserIdColumn(db, gastosFijosTable);
+    print('DatabaseService: hasOldColumn = $hasOldColumn');
 
     String whereClause = 'user_id = ?';
     List<dynamic> whereArgs = [userId];
@@ -1181,7 +1183,10 @@ class DatabaseService {
       orderBy: 'fecha_inicio DESC',
     );
 
-    return maps.map((map) => GastoFijo.fromMap(map)).toList();
+    print('DatabaseService: Found ${maps.length} gastos fijos');
+    final gastos = maps.map((map) => GastoFijo.fromMap(map)).toList();
+    print('DatabaseService: Converted to ${gastos.length} GastoFijo objects');
+    return gastos;
   }
 
   Future<GastoFijo?> getGastoFijo(int idGasto) async {

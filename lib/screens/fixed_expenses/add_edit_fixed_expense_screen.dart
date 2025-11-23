@@ -33,6 +33,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
   String _selectedCategory = 'Otros';
   PaymentType _selectedPaymentType = PaymentType.onDay;
   bool _isLoading = false;
+  bool _isLoadingAccounts = true;
   double _annualCostPreview = 0.0;
 
   // Account selection
@@ -53,8 +54,8 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAccounts();
 
+    // Initialize form values first
     if (widget.expense != null) {
       // Editing existing expense
       _nameController.text = widget.expense!.name;
@@ -72,22 +73,37 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
         _dayOfWeekController.text = '1'; // Lunes
       }
     }
-    _updateAnnualCostPreview();
 
-    // Agregar listeners para actualizar el costo anual cuando cambien los valores
+    // Add listener for annual cost preview
     _amountController.addListener(_updateAnnualCostPreview);
+
+    // Load accounts asynchronously
+    _loadAccounts();
   }
 
   Future<void> _loadAccounts() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.user;
 
-    if (currentUser != null) {
-      try {
-        final dbService = DatabaseService();
-        final accounts = await dbService.getAccounts(currentUser.id);
-
+    if (currentUser == null) {
+      print('AddEditFixedExpense: No current user found');
+      if (mounted) {
         setState(() {
+          _isLoadingAccounts = false;
+        });
+      }
+      return;
+    }
+
+    try {
+      print('AddEditFixedExpense: Loading accounts for user ${currentUser.id}');
+      final dbService = DatabaseService();
+      final accounts = await dbService.getAccounts(currentUser.id);
+      print('AddEditFixedExpense: Loaded ${accounts.length} accounts');
+
+      if (mounted) {
+        setState(() {
+          _accounts.clear(); // Clear first to avoid duplicates
           _accounts.addAll(accounts);
 
           // Auto-select default account if available and no expense is being edited
@@ -95,15 +111,24 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
             _selectedAccount =
                 accounts.where((account) => account.isDefault).firstOrNull ??
                 (accounts.isNotEmpty ? accounts.first : null);
+            print('AddEditFixedExpense: Auto-selected account: ${_selectedAccount?.name}');
           } else {
             // When editing, find the account associated with this expense
             _selectedAccount = accounts
                 .where((account) => account.id == widget.expense!.accountId)
                 .firstOrNull;
+            print('AddEditFixedExpense: Editing, selected account: ${_selectedAccount?.name}');
           }
+
+          _isLoadingAccounts = false;
         });
-      } catch (e) {
-        // Handle error silently for now
+      }
+    } catch (e) {
+      print('Error loading accounts: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingAccounts = false;
+        });
       }
     }
   }
@@ -121,6 +146,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text(
           widget.expense != null ? 'Editar Gasto Fijo' : 'Nuevo Gasto Fijo',
@@ -424,10 +450,30 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Account selection
-                      if (_accounts.isNotEmpty) ...[
-                        DropdownButtonFormField<Account>(
-                          initialValue: _selectedAccount,
+                      // Account selection - show loading indicator while accounts are loading
+                      if (_isLoadingAccounts)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            children: [
+                              SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 16),
+                              Text('Cargando cuentas...'),
+                            ],
+                          ),
+                        )
+                      else
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(_selectedAccount?.id ?? 'no_account'),
+                          initialValue: _selectedAccount?.id,
                           decoration: InputDecoration(
                             labelText: 'Cuenta de pago (opcional)',
                             hintText: 'Selecciona la cuenta para este gasto',
@@ -436,48 +482,62 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                             ),
                             prefixIcon: const Icon(Icons.account_balance),
                           ),
-                          items: _accounts.map((account) {
-                            return DropdownMenuItem(
-                              value: account,
-                              child: Row(
-                                children: [
-                                  Text(
-                                    '${account.name}${account.alias != null ? ' (${account.alias})' : ''}',
-                                  ),
-                                  if (account.isDefault) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.deepPurple.withValues(
-                                          alpha: 0.1,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        'Por defecto',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.deepPurple,
-                                          fontWeight: FontWeight.bold,
-                                        ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('Sin cuenta asignada'),
+                            ),
+                            ..._accounts.map((account) {
+                              return DropdownMenuItem<String>(
+                                value: account.id,
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${account.name}${account.alias != null ? ' (${account.alias})' : ''}',
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
+                                    if (account.isDefault) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.deepPurple.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Text(
+                                          'Por defecto',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.deepPurple,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (account) {
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged: (accountId) {
                             setState(() {
-                              _selectedAccount = account;
+                              _selectedAccount = accountId == null
+                                  ? null
+                                  : _accounts.firstWhere(
+                                      (account) => account.id == accountId,
+                                    );
                             });
                           },
                         ),
-                        const SizedBox(height: 8),
+                      const SizedBox(height: 8),
+                      if (!_isLoadingAccounts)
                         Text(
                           'Si no seleccionas una cuenta, podrás elegirla al momento del pago',
                           style: TextStyle(
@@ -486,8 +546,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                             fontStyle: FontStyle.italic,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                      ],
+                      const SizedBox(height: 16),
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -666,22 +725,21 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
   // Función para actualizar la vista previa del costo anual
   void _updateAnnualCostPreview() {
     final amountText = _amountController.text;
+    double newPreview = 0.0;
+
     if (amountText.isNotEmpty) {
       final amount = double.tryParse(amountText);
       if (amount != null && amount > 0) {
-        setState(() {
-          _annualCostPreview = widget.frequency == ExpenseFrequency.monthly
-              ? amount * 12
-              : amount * 52;
-        });
-      } else {
-        setState(() {
-          _annualCostPreview = 0.0;
-        });
+        newPreview = widget.frequency == ExpenseFrequency.monthly
+            ? amount * 12
+            : amount * 52;
       }
-    } else {
+    }
+
+    // Only call setState if the value actually changed
+    if (_annualCostPreview != newPreview) {
       setState(() {
-        _annualCostPreview = 0.0;
+        _annualCostPreview = newPreview;
       });
     }
   }
