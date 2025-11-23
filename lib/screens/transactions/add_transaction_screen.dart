@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/transaction.dart' as tx;
+import '../../models/transaccion.dart' as old_tx;
 import '../../models/account.dart';
 import '../../services/database_service.dart';
 import '../../providers/auth_provider.dart';
@@ -46,6 +47,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   // List<CreditCard> _creditCards = [];
   bool _isLoading = true;
   bool _isSaving = false;
+
+  // Top descriptions for suggestions
+  List<String> _topExpenseDescriptions = [];
+  List<String> _topIncomeDescriptions = [];
 
   // Focus nodes for quick navigation
   final _amountFocus = FocusNode();
@@ -107,9 +112,27 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           return a.name.compareTo(b.name);
         });
 
+        // Load top transaction descriptions for suggestions
+        List<String> topExpenses = [];
+        List<String> topIncomes = [];
+
+        if (currentUser.id.isNotEmpty) {
+          // Use the old TipoTransaccion enum for compatibility with database service
+          topExpenses = await dbService.getTopTransactionDescriptions(
+            currentUser.id,
+            old_tx.TipoTransaccion.gasto,
+          );
+          topIncomes = await dbService.getTopTransactionDescriptions(
+            currentUser.id,
+            old_tx.TipoTransaccion.ingreso,
+          );
+        }
+
         setState(() {
           _accounts = accounts;
           // _creditCards = creditCards; // Credit cards removed
+          _topExpenseDescriptions = topExpenses;
+          _topIncomeDescriptions = topIncomes;
           _isLoading = false;
 
           // Auto-select default account if available
@@ -340,6 +363,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   },
                 ),
               ),
+              const SizedBox(height: 12),
+
+              // Suggestions chips
+              if (_transactionType != null) _buildDescriptionSuggestions(),
               const SizedBox(height: 16),
 
               // Category field
@@ -414,6 +441,71 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDescriptionSuggestions() {
+    // Fallback suggestions for new users
+    final List<String> fallbackExpenses = [
+      'Supermercado',
+      'Combustible',
+      'Delivery',
+      'Farmacia',
+      'Café',
+    ];
+    final List<String> fallbackIncomes = [
+      'Sueldo',
+      'Venta',
+      'Freelance',
+      'Regalo',
+      'Reintegro',
+    ];
+
+    final bool isExpense = _transactionType == tx.TransactionType.expense;
+    final List<String> suggestions = isExpense
+        ? (_topExpenseDescriptions.isNotEmpty
+              ? _topExpenseDescriptions
+              : fallbackExpenses)
+        : (_topIncomeDescriptions.isNotEmpty
+              ? _topIncomeDescriptions
+              : fallbackIncomes);
+
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Sugerencias',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8.0,
+          runSpacing: 8.0,
+          children: suggestions.map((label) {
+            return ActionChip(
+              label: Text(label),
+              onPressed: () {
+                setState(() {
+                  _descriptionController.text = label;
+                });
+                // Move focus to category field
+                _categoryFocus.requestFocus();
+              },
+              backgroundColor: Colors.grey[200],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: Colors.grey[300]!),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 

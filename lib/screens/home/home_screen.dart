@@ -9,7 +9,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../providers/auth_provider.dart';
 // import '../../models/user.dart'; // User model is now Usuario
-// import '../../models/fixed_expense.dart'; // FixedExpense is now GastoFijo
+import '../../models/fixed_expense.dart'; // Needed for ExpenseFrequency enum
 import '../../models/proximo_gasto.dart';
 import '../../models/account.dart';
 import '../../models/user.dart';
@@ -21,6 +21,7 @@ import '../../services/database_service.dart';
 import '../accounts/add_edit_account_screen.dart';
 import '../accounts/accounts_screen.dart';
 import '../transactions/add_transaction_screen.dart';
+import '../fixed_expenses/add_edit_fixed_expense_screen.dart';
 
 // Extensiones auxiliares para manejo de fechas
 extension DateTimeExtensions on DateTime {
@@ -51,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Account> _accounts = [];
   List<ProximoGasto> _proximosGastos = [];
   Map<String, double> _accountBalances = {};
+  Map<int, String> _gastoFijoNames = {}; // Map of gastoFijo ID to name
   List<new_tx.Transaction> _dailyTransactions =
       []; // List for daily transactions
   final double _totalAvailableBalance = 0.0; // Sum of all account balances
@@ -207,9 +209,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
       );
 
-      // Get real próximos gastos from database
-      final proximosGastos = await dbService.getProximosGastos(currentUser.id);
-      print('HomeScreen: Found ${proximosGastos.length} próximos gastos');
+      // Generate próximos gastos dynamically from gastos fijos
+      // This ensures newly created fixed expenses appear immediately
+      final proximosGastos = await _generateProximosGastosFromFixed(currentUser.id);
+      print('HomeScreen: Generated ${proximosGastos.length} próximos gastos from fixed expenses');
 
       // No need for Future.wait here as we await individually
       // final results = await Future.wait([accountsFuture, proximosGastosFuture]);
@@ -466,13 +469,34 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Próximos gastos',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Próximos gastos',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              InkWell(
+                onTap: () => _navigateToAddFixedExpense(),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6B73FF).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.add,
+                    size: 20,
+                    color: Color(0xFF6B73FF),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           // Lista de gastos sin recuadros individuales
@@ -576,7 +600,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      gasto.detalle,
+                      _gastoFijoNames[gasto.idGasto] ?? gasto.detalle,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -2023,6 +2047,70 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _navigateToAddFixedExpense() async {
+    // Show dialog to select frequency
+    final frequency = await showDialog<ExpenseFrequency>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nuevo Gasto Fijo'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Selecciona la frecuencia del gasto:'),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.calendar_today, color: Colors.blue),
+              ),
+              title: const Text('Mensual'),
+              subtitle: const Text('Se repite cada mes'),
+              onTap: () => Navigator.of(context).pop(ExpenseFrequency.monthly),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.date_range, color: Colors.green),
+              ),
+              title: const Text('Semanal'),
+              subtitle: const Text('Se repite cada semana'),
+              onTap: () => Navigator.of(context).pop(ExpenseFrequency.weekly),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+
+    // Navigate to add screen if frequency was selected
+    if (frequency != null && mounted) {
+      final result = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (context) => AddEditFixedExpenseScreen(frequency: frequency),
+        ),
+      );
+
+      // Reload data if a fixed expense was added
+      if (result == true) {
+        await _loadData();
+      }
+    }
+  }
+
   void _selectAccountForExpense(ProximoGasto gasto) {
     // TODO: Implementar lógica para mostrar un diálogo/modal para seleccionar cuenta
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2049,6 +2137,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showAccountSelectionForExpense(int gastoIndex) async {
     final gasto = _proximosGastos[gastoIndex];
+    final gastoName = _gastoFijoNames[gasto.idGasto] ?? gasto.detalle;
 
     if (_accounts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2067,7 +2156,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final result = await showDialog<Account>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Pagar: ${gasto.detalle}'),
+        title: Text('Pagar: $gastoName'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2121,6 +2210,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (currentUser == null) return;
 
     try {
+      // Get the actual name of the fixed expense
+      final gastoName = _gastoFijoNames[gasto.idGasto] ?? gasto.detalle;
+
       // Create a transaction for this expense payment
       final newTransaction = new_tx.Transaction(
         id: const Uuid().v4(),
@@ -2128,7 +2220,7 @@ class _HomeScreenState extends State<HomeScreen> {
         accountId: selectedAccount.id,
         type: new_tx.TransactionType.expense,
         amount: gasto.importe,
-        description: 'Pago: ${gasto.detalle}',
+        description: 'Pago: $gastoName',
         category: 'Gasto Fijo',
         date: DateTime.now(),
         currency: selectedAccount.moneda,
@@ -2139,19 +2231,12 @@ class _HomeScreenState extends State<HomeScreen> {
       // Save the transaction
       await dbService.insertNewTransaction(newTransaction);
 
-      // Update the gasto as paid
-      setState(() {
-        _proximosGastos[gastoIndex] = _proximosGastos[gastoIndex].copyWith(
-          estado: EstadoProximoGasto.pagado,
-        );
-      });
-
-      // Reload data to refresh balances
+      // Reload data to refresh balances and update paid status
       await _loadData();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Gasto pagado: ${gasto.detalle}'),
+          content: Text('Gasto pagado: $gastoName'),
           backgroundColor: Colors.green,
         ),
       );
@@ -2201,26 +2286,51 @@ class _HomeScreenState extends State<HomeScreen> {
   ) async {
     final gastosFijos = await dbService.getGastosFijos(userId);
     final List<ProximoGasto> proximosGastos = [];
+    final Map<int, String> gastoNames = {};
+
+    // Get today's transactions to check for payments
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final todayTransactions = await dbService.getTransactions(
+      userId: userId,
+      fromDate: todayStart,
+      toDate: todayEnd,
+    );
 
     for (final gastoFijo in gastosFijos) {
       if (!gastoFijo.activo) continue;
+
+      // Store the name for later use
+      gastoNames[gastoFijo.idGasto] = gastoFijo.nombre;
 
       // Calculate next due date based on frequency
       DateTime nextDueDate = _calculateNextDueDate(gastoFijo);
 
       // Only show if due within next 30 days
       if (nextDueDate.isBefore(DateTime.now().add(const Duration(days: 30)))) {
+        // Check if this expense was already paid today
+        final isPaidToday = todayTransactions.any((transaction) =>
+            transaction.description?.contains('Pago: ${gastoFijo.nombre}') ??
+            false);
+
         proximosGastos.add(
           ProximoGasto(
             idObligacion: gastoFijo.idGasto,
             idGasto: gastoFijo.idGasto,
             montoEstimado: gastoFijo.montoCuotas,
             fechaVencimiento: nextDueDate,
-            estado: EstadoProximoGasto.pendiente,
+            estado: isPaidToday
+                ? EstadoProximoGasto.pagado
+                : EstadoProximoGasto.pendiente,
+            fechaPago: isPaidToday ? now : null,
           ),
         );
       }
     }
+
+    // Update the names map in state
+    _gastoFijoNames = gastoNames;
 
     // Sort by due date
     proximosGastos.sort(

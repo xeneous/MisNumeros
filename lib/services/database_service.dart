@@ -1150,7 +1150,14 @@ class DatabaseService {
   // GastoFijo operations
   Future<int> insertGastoFijo(GastoFijo gastoFijo) async {
     final db = await database;
-    return await db.insert(gastosFijosTable, gastoFijo.toMap());
+    final map = gastoFijo.toMap();
+
+    // Remove id_gasto if it's 0 to allow AUTOINCREMENT to work
+    if (gastoFijo.idGasto == 0) {
+      map.remove('id_gasto');
+    }
+
+    return await db.insert(gastosFijosTable, map);
   }
 
   Future<List<GastoFijo>> getGastosFijos(String userId) async {

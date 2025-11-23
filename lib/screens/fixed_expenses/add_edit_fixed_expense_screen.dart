@@ -609,7 +609,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
       }
 
       if (mounted) {
-        Navigator.of(context).pop(); // Go back to expenses list
+        Navigator.of(context).pop(true); // Return true to signal success
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
