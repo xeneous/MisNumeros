@@ -53,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, double> _accountBalances = {};
   List<new_tx.Transaction> _dailyTransactions =
       []; // List for daily transactions
-  double _totalAvailableBalance = 0.0; // Sum of all account balances
+  final double _totalAvailableBalance = 0.0; // Sum of all account balances
   bool _isLoading = true;
   double _dailyLimit = 0.0;
 
@@ -389,53 +389,73 @@ class _HomeScreenState extends State<HomeScreen> {
     double? amount,
     required Color color,
   }) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          height: 65,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.2)),
+    final isDisponible = title == 'Disponible';
+
+    return InkWell(
+      onTap: isDisponible ? _showAccountBreakdown : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            height: 65,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.2)),
+            ),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _showFinancialValues
+                      ? (balances != null
+                            ? _formatMultiCurrency(balances)
+                            : _formatFinancialValue(amount ?? 0.0))
+                      : '● ● ● ● ●',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
           ),
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
+          Positioned(
+            top: -10,
+            left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: Text(
-                _showFinancialValues
-                    ? (balances != null
-                          ? _formatMultiCurrency(balances)
-                          : _formatFinancialValue(amount ?? 0.0))
-                    : '● ● ● ● ●',
+                title,
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                   color: color,
                 ),
-                textAlign: TextAlign.center,
               ),
             ),
           ),
-        ),
-        Positioned(
-          top: -10,
-          left: 12,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
+          if (isDisponible)
+            Positioned(
+              top: -10,
+              right: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: color.withOpacity(0.6),
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -726,6 +746,257 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showAccountBreakdown() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.65,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Desglose del Disponible',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _showFinancialValues
+                              ? _formatMultiCurrency(_totalBalancesByCurrency)
+                              : '● ● ● ● ●',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[800],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${_accounts.length} cuenta${_accounts.length != 1 ? 's' : ''}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  // Account list
+                  Expanded(
+                    child: _accounts.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.account_balance_wallet_outlined,
+                                  size: 64,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No hay cuentas configuradas',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            controller: scrollController,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            itemCount: _accounts.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final account = _accounts[index];
+                              final balance =
+                                  _accountBalances[account.id] ?? 0.0;
+                              return _buildAccountBreakdownCard(
+                                account,
+                                balance,
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildAccountBreakdownCard(Account account, double balance) {
+    final color = _getAccountColor(account.type);
+    final icon = _getAccountIcon(account.type);
+
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context); // Close the breakdown modal
+        _showAccountTransactions(account); // Open transactions
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              color.withOpacity(0.1),
+              color.withOpacity(0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: color.withOpacity(0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            // Account info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    account.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Text(
+                        account.type.displayName,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      if (account.isDefault) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Colors.blue.withOpacity(0.3),
+                            ),
+                          ),
+                          child: const Text(
+                            'Principal',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Balance
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _showFinancialValues
+                      ? _formatFinancialValue(
+                          balance,
+                          currency: account.moneda,
+                        )
+                      : '● ● ● ● ●',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  account.moneda,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right,
+              color: Colors.grey[400],
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showAccountTransactions(Account account) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.user;
@@ -935,7 +1206,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Aquí irían los subtotales por moneda
               Expanded(
                 child: _buildTransactionList(
-                  _dailyTransactions as List<new_tx.Transaction>,
+                  _dailyTransactions,
                   scrollController,
                 ),
               ),
@@ -1223,7 +1494,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   flex: 4,
                   child: DropdownButtonFormField<Account>(
-                    value: _quickAddSelectedAccount,
+                    initialValue: _quickAddSelectedAccount,
                     items: _accounts.map((cuenta) {
                       return DropdownMenuItem<Account>(
                         value: cuenta,
@@ -1805,7 +2076,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('Selecciona la cuenta:'),
             const SizedBox(height: 8),
             DropdownButtonFormField<Account>(
-              value: selectedAccount,
+              initialValue: selectedAccount,
               items: _accounts.map((account) {
                 return DropdownMenuItem<Account>(
                   value: account,
