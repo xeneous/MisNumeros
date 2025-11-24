@@ -20,23 +20,35 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
   bool _isLoading = true;
   double _totalMonthlyExpenses = 0.0;
   double _totalWeeklyExpenses = 0.0;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadGastosFijos();
+    // Use addPostFrameCallback to ensure context is available and avoid build conflicts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadGastosFijos();
+    });
   }
 
   Future<void> _loadGastosFijos() async {
+    if (!mounted) return;
+    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = authProvider.user;
 
     if (currentUser != null) {
       try {
         final dbService = DatabaseService();
+        // Add timeout to prevent infinite loading
         final expenses = await dbService.getGastosFijos(
           currentUser.id, // Use Firebase UID directly as string
-        ); // Fetch real data
+        ).timeout(const Duration(seconds: 10)); // Fetch real data with timeout
 
         // Calcular totales
         double monthlyTotal = 0.0;
@@ -44,25 +56,32 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
 
         for (var expense in expenses) {
           if (expense.isActive) {
+            // Safety check for infinite values
+            final amount = expense.amount.isFinite ? expense.amount : 0.0;
+            
             if (expense.frecuencia == 'MENSUAL') {
-              monthlyTotal += expense.amount;
+              monthlyTotal += amount;
             } else if (expense.frecuencia == 'SEMANAL') {
-              weeklyTotal += expense.amount;
+              weeklyTotal += amount;
             }
           }
         }
 
-        setState(() {
-          _fixedExpenses = expenses;
-          _totalMonthlyExpenses = monthlyTotal;
-          _totalWeeklyExpenses = weeklyTotal;
-          _isLoading = false;
-        });
-      } catch (e) {
-        setState(() {
-          _isLoading = false;
-        });
         if (mounted) {
+          setState(() {
+            _fixedExpenses = expenses;
+            _totalMonthlyExpenses = monthlyTotal;
+            _totalWeeklyExpenses = weeklyTotal;
+            _isLoading = false;
+          });
+        }
+      } catch (e) {
+        print('Error loading fixed expenses: $e');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Error al cargar datos: $e';
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error al cargar gastos fijos: $e'),
@@ -71,35 +90,76 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
           );
         }
       }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_errorMessage != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Gastos Fijos'), elevation: 0),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 60, color: Colors.red),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadGastosFijos,
+                child: const Text('Reintentar'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Gastos Fijos'), elevation: 0),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Resumen de gastos fijos
-                _buildSummaryCard(),
+          : SafeArea(
+              child: Column(
+                children: [
+                  // Resumen de gastos fijos
+                  _buildSummaryCard(),
 
-                // Lista de gastos fijos
-                Expanded(
-                  child: _fixedExpenses.isEmpty
-                      ? _buildEmptyState()
-                      : _buildGastosFijosList(),
-                ),
-              ],
+                  // Lista de gastos fijos
+                  Expanded(
+                    child: _fixedExpenses.isEmpty
+                        ? _buildEmptyState()
+                        : _buildGastosFijosList(),
+                  ),
+                ],
+              ),
             ),
       floatingActionButton: const AddFixedExpenseFab(),
     );
   }
 
   Widget _buildSummaryCard() {
+    // Safety check for totals
+    final safeMonthly = _totalMonthlyExpenses.isFinite ? _totalMonthlyExpenses : 0.0;
+    final safeWeekly = _totalWeeklyExpenses.isFinite ? _totalWeeklyExpenses : 0.0;
+    
     final totalAnnualExpenses =
-        (_totalMonthlyExpenses * 12) + (_totalWeeklyExpenses * 52);
+        (safeMonthly * 12) + (safeWeekly * 52);
+    final safeAnnual = totalAnnualExpenses.isFinite ? totalAnnualExpenses : 0.0;
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -110,8 +170,7 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
         border: Border.all(color: Colors.grey[200]!),
         boxShadow: [
           BoxShadow(
-            // Corrected withOpacity
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -131,7 +190,7 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
                 child: Column(
                   children: [
                     Text(
-                      '\$${_totalMonthlyExpenses.toStringAsFixed(0)}',
+                      '\$${safeMonthly.toStringAsFixed(0)}',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -150,7 +209,7 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
                 child: Column(
                   children: [
                     Text(
-                      '\$${_totalWeeklyExpenses.toStringAsFixed(0)}',
+                      '\$${safeWeekly.toStringAsFixed(0)}',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -170,8 +229,7 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              // Corrected withOpacity
-              color: Colors.teal.withOpacity(0.1),
+              color: Colors.teal.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -180,7 +238,7 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
                 const Icon(Icons.calendar_month, color: Colors.teal, size: 16),
                 const SizedBox(width: 8),
                 Text(
-                  'Anual: \$${totalAnnualExpenses.toStringAsFixed(0)}',
+                  'Anual: \$${safeAnnual.toStringAsFixed(0)}',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,

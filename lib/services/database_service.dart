@@ -1271,12 +1271,40 @@ class DatabaseService {
   Future<GastoFijo> _convertFixedExpenseToGastoFijo(
     FixedExpense fixedExpense,
   ) async {
-    // Ensure we have valid account and category IDs
-    int accountId = await _ensureDefaultAccount(fixedExpense.userId);
+    // Get account local ID
+    int accountId;
+    if (fixedExpense.accountId != null) {
+      // Find the account by UUID and get its local ID
+      final account = await getAccount(fixedExpense.accountId!);
+      if (account != null) {
+        // Get the local ID from SQLite by querying with the UUID
+        final db = await database;
+        final List<Map<String, dynamic>> results = await db.query(
+          accountsTable,
+          columns: ['id_cuenta'],
+          where: 'id = ?',
+          whereArgs: [account.id],
+          limit: 1,
+        );
+        if (results.isNotEmpty) {
+          accountId = results.first['id_cuenta'] as int;
+        } else {
+          // Fallback to default account if not found
+          accountId = await _ensureDefaultAccount(fixedExpense.userId);
+        }
+      } else {
+        // Fallback to default account if not found
+        accountId = await _ensureDefaultAccount(fixedExpense.userId);
+      }
+    } else {
+      // No account specified, use default
+      accountId = await _ensureDefaultAccount(fixedExpense.userId);
+    }
+
     int categoryId = await _ensureDefaultCategory(fixedExpense.userId);
 
     print(
-      'DatabaseService: Using Account ID: $accountId, Category ID: $categoryId',
+      'DatabaseService: Converting FixedExpense to GastoFijo - Account UUID: ${fixedExpense.accountId}, Account ID: $accountId, Category ID: $categoryId',
     );
 
     return GastoFijo(

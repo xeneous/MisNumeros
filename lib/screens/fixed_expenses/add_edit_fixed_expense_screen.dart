@@ -33,12 +33,8 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
   String _selectedCategory = 'Otros';
   PaymentType _selectedPaymentType = PaymentType.onDay;
   bool _isLoading = false;
-  bool _isLoadingAccounts = true;
   double _annualCostPreview = 0.0;
-
-  // Account selection
-  final List<Account> _accounts = [];
-  Account? _selectedAccount;
+  String? _selectedAccountId;
 
   final List<String> _categories = [
     'Deporte',
@@ -65,6 +61,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
       _dayOfWeekController.text = widget.expense!.dayOfWeek.toString();
       _selectedCategory = widget.expense!.category;
       _selectedPaymentType = widget.expense!.paymentType;
+      _selectedAccountId = widget.expense!.accountId;
     } else {
       // Adding new expense - set default day
       if (widget.frequency == ExpenseFrequency.monthly) {
@@ -76,61 +73,6 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
 
     // Add listener for annual cost preview
     _amountController.addListener(_updateAnnualCostPreview);
-
-    // Load accounts asynchronously
-    _loadAccounts();
-  }
-
-  Future<void> _loadAccounts() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final currentUser = authProvider.user;
-
-    if (currentUser == null) {
-      print('AddEditFixedExpense: No current user found');
-      if (mounted) {
-        setState(() {
-          _isLoadingAccounts = false;
-        });
-      }
-      return;
-    }
-
-    try {
-      print('AddEditFixedExpense: Loading accounts for user ${currentUser.id}');
-      final dbService = DatabaseService();
-      final accounts = await dbService.getAccounts(currentUser.id);
-      print('AddEditFixedExpense: Loaded ${accounts.length} accounts');
-
-      if (mounted) {
-        setState(() {
-          _accounts.clear(); // Clear first to avoid duplicates
-          _accounts.addAll(accounts);
-
-          // Auto-select default account if available and no expense is being edited
-          if (widget.expense == null) {
-            _selectedAccount =
-                accounts.where((account) => account.isDefault).firstOrNull ??
-                (accounts.isNotEmpty ? accounts.first : null);
-            print('AddEditFixedExpense: Auto-selected account: ${_selectedAccount?.name}');
-          } else {
-            // When editing, find the account associated with this expense
-            _selectedAccount = accounts
-                .where((account) => account.id == widget.expense!.accountId)
-                .firstOrNull;
-            print('AddEditFixedExpense: Editing, selected account: ${_selectedAccount?.name}');
-          }
-
-          _isLoadingAccounts = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading accounts: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingAccounts = false;
-        });
-      }
-    }
   }
 
   @override
@@ -450,103 +392,81 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Account selection - show loading indicator while accounts are loading
-                      if (_isLoadingAccounts)
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey[300]!),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Row(
-                            children: [
-                              SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                      // Account selection with FutureBuilder
+                      FutureBuilder<List<Account>>(
+                        future: DatabaseService().getAccounts(
+                          Provider.of<AuthProvider>(context, listen: false).user?.id ?? '',
+                        ),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              SizedBox(width: 16),
-                              Text('Cargando cuentas...'),
-                            ],
-                          ),
-                        )
-                      else
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(_selectedAccount?.id ?? 'no_account'),
-                          initialValue: _selectedAccount?.id,
-                          decoration: InputDecoration(
-                            labelText: 'Cuenta de pago (opcional)',
-                            hintText: 'Selecciona la cuenta para este gasto',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon: const Icon(Icons.account_balance),
-                          ),
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: null,
-                              child: Text('Sin cuenta asignada'),
-                            ),
-                            ..._accounts.map((account) {
-                              return DropdownMenuItem<String>(
-                                value: account.id,
-                                child: Row(
-                                  children: [
-                                    Expanded(
+                              child: const Row(
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text('Cargando cuentas...'),
+                                ],
+                              ),
+                            );
+                          }
+
+                          final accounts = snapshot.data ?? [];
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DropdownButtonFormField<String>(
+                                value: _selectedAccountId,
+                                decoration: InputDecoration(
+                                  labelText: 'Cuenta de pago sugerida (opcional)',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  prefixIcon: const Icon(Icons.account_balance_wallet),
+                                ),
+                                items: [
+                                  const DropdownMenuItem<String>(
+                                    value: null,
+                                    child: Text('Sin cuenta asignada'),
+                                  ),
+                                  ...accounts.map((account) {
+                                    return DropdownMenuItem<String>(
+                                      value: account.id,
                                       child: Text(
                                         '${account.name}${account.alias != null ? ' (${account.alias})' : ''}',
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                    if (account.isDefault) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.deepPurple.withValues(
-                                            alpha: 0.1,
-                                          ),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: const Text(
-                                          'Por defecto',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.deepPurple,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                          onChanged: (accountId) {
-                            setState(() {
-                              _selectedAccount = accountId == null
-                                  ? null
-                                  : _accounts.firstWhere(
-                                      (account) => account.id == accountId,
                                     );
-                            });
-                          },
-                        ),
-                      const SizedBox(height: 8),
-                      if (!_isLoadingAccounts)
-                        Text(
-                          'Si no seleccionas una cuenta, podrás elegirla al momento del pago',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      const SizedBox(height: 16),
+                                  }),
+                                ],
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedAccountId = value;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Esta será la cuenta sugerida al momento de pagar',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -591,6 +511,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                         widget.expense != null
                             ? 'Guardar Cambios'
                             : 'Crear Gasto Fijo',
+                        style: const TextStyle(fontSize: 16),
                       ),
               ),
             ),
@@ -635,7 +556,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
               ? int.parse(_dayOfWeekController.text)
               : 1,
           category: _selectedCategory,
-          accountId: _selectedAccount?.id,
+          accountId: _selectedAccountId,
           updatedAt: DateTime.now(),
         );
 
@@ -659,7 +580,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
               ? int.parse(_dayOfWeekController.text)
               : 1,
           category: _selectedCategory,
-          accountId: _selectedAccount?.id,
+          accountId: _selectedAccountId,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );

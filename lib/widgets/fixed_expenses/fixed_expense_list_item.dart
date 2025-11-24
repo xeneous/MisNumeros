@@ -2,10 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/gasto_fijo.dart';
+import '../../models/fixed_expense.dart';
+import '../../screens/fixed_expenses/add_edit_fixed_expense_screen.dart';
+import '../../services/database_service.dart';
 
 class FixedExpenseListItem extends StatelessWidget {
   final GastoFijo expense;
   final VoidCallback onExpenseUpdated;
+
+  static final _currencyFormat = NumberFormat.currency(
+    locale: 'es_AR',
+    symbol: '\$',
+    decimalDigits: 0,
+  );
 
   const FixedExpenseListItem({
     super.key,
@@ -15,11 +24,15 @@ class FixedExpenseListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      locale: 'es_AR',
-      symbol: '\$',
-      decimalDigits: 0,
-    );
+    // Safety check for infinite or NaN amounts which can crash rendering
+    final safeAmount = expense.amount.isFinite ? expense.amount : 0.0;
+    final formattedAmount = _currencyFormat.format(safeAmount);
+    
+    // Calculate annual amount safely
+    final annualAmount = expense.frecuencia == 'MENSUAL' 
+        ? safeAmount * 12 
+        : safeAmount * 52;
+    final safeAnnualAmount = annualAmount.isFinite ? annualAmount : 0.0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -51,11 +64,14 @@ class FixedExpenseListItem extends StatelessWidget {
                   // Nombre y frecuencia
                   Row(
                     children: [
-                      Text(
-                        expense.nombre,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Text(
+                          expense.nombre,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -98,7 +114,7 @@ class FixedExpenseListItem extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        currencyFormat.format(expense.amount),
+                        formattedAmount,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -141,7 +157,7 @@ class FixedExpenseListItem extends StatelessWidget {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        'Anual: \$${currencyFormat.format(expense.frecuencia == 'MENSUAL' ? expense.amount * 12 : expense.amount * 52)}',
+                        'Anual: \$${_currencyFormat.format(safeAnnualAmount)}',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.teal[700],
@@ -168,14 +184,35 @@ class FixedExpenseListItem extends StatelessWidget {
               children: [
                 Switch(
                   value: expense.isActive,
-                  onChanged: (value) {
-                    // TODO: Implementar activar/desactivar gasto fijo
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Activar/desactivar - Próximamente'),
-                        backgroundColor: Colors.blue,
-                      ),
-                    );
+                  onChanged: (value) async {
+                    try {
+                      final dbService = DatabaseService();
+                      final updatedExpense = expense.copyWith(activo: value);
+                      await dbService.updateGastoFijo(updatedExpense);
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              value
+                                  ? '${expense.nombre} activado'
+                                  : '${expense.nombre} desactivado',
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                        onExpenseUpdated();
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error al actualizar: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   },
                   activeThumbColor: Colors.deepPurple,
                 ),
@@ -221,14 +258,39 @@ class FixedExpenseListItem extends StatelessWidget {
     );
   }
 
-  void _showEditExpenseDialog(BuildContext context) {
-    // TODO: Implement edit expense dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Editar gasto fijo - Próximamente'),
-        backgroundColor: Colors.blue,
+  Future<void> _showEditExpenseDialog(BuildContext context) async {
+    // Convert GastoFijo to FixedExpense
+    final fixedExpense = FixedExpense(
+      id: expense.idGasto.toString(),
+      userId: expense.userId,
+      name: expense.nombre,
+      description: expense.descripcion,
+      amount: expense.montoCuotas,
+      frequency: expense.frecuencia == 'MENSUAL'
+          ? ExpenseFrequency.monthly
+          : ExpenseFrequency.weekly,
+      paymentType: PaymentType.onDay, // Default, could be stored in DB later
+      dayOfMonth: expense.diaMes ?? 1,
+      dayOfWeek: expense.diaSemana ?? 1,
+      category: 'Otros', // Default category
+      accountId: null, // Will be loaded from DB if needed
+      isActive: expense.activo,
+      createdAt: expense.fechaInicio,
+      updatedAt: DateTime.now(),
+    );
+
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => AddEditFixedExpenseScreen(
+          frequency: fixedExpense.frequency,
+          expense: fixedExpense,
+        ),
       ),
     );
+
+    if (result == true) {
+      onExpenseUpdated();
+    }
   }
 
   void _showDeleteExpenseDialog(BuildContext context) {
@@ -245,15 +307,32 @@ class FixedExpenseListItem extends StatelessWidget {
             child: const Text('Cancelar'),
           ),
           TextButton(
-            onPressed: () {
-              // TODO: Implement expense deletion
+            onPressed: () async {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Eliminar gasto fijo - Próximamente'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
+
+              try {
+                final dbService = DatabaseService();
+                await dbService.deleteGastoFijo(expense.idGasto);
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${expense.nombre} eliminado correctamente'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  onExpenseUpdated();
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error al eliminar: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
           ),
