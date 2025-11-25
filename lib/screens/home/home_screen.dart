@@ -43,10 +43,11 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final DatabaseService dbService = DatabaseService();
   // Controla si se muestran los valores o asteriscos
   bool _showFinancialValues = true;
+  bool _hasLoadedOnce = false;
 
   // Datos del home
   List<Account> _accounts = [];
@@ -78,15 +79,30 @@ class _HomeScreenState extends State<HomeScreen> {
   List<String> _topExpenseDescriptions = [];
   List<String> _topIncomeDescriptions = [];
   int _currentPage = 0;
+  bool _showOnlyPending = true; // Filtro para próximos gastos
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload data when returning to this screen, but skip first load
+    if (_hasLoadedOnce && mounted) {
+      print('HomeScreen: Returning to screen, reloading data');
+      _loadData();
+    }
+    _hasLoadedOnce = true;
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+
     // Properly dispose of controllers and focus nodes
     _quickAddAmountController.dispose();
     _quickAddDescriptionController.dispose();
@@ -99,6 +115,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _quickAddAmountFocus.dispose();
 
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Reload data when app returns to foreground/resumed state
+    if (state == AppLifecycleState.resumed) {
+      print('HomeScreen: App resumed, reloading data');
+      _loadData();
+    }
   }
 
   @override
@@ -364,22 +390,21 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
 
-          const SizedBox(height: 24),
-          // Acciones rápidas fijas
-          _buildQuickTransactionForm(),
-          const SizedBox(height: 24),
-
-          // Próximos gastos - recuadro suave con tabla
-          _buildProximosGastos(),
-
           const SizedBox(height: 20),
-          const Divider(),
-          _buildDailySummarySection(), // New daily summary section
 
-          const SizedBox(height: 20),
-          const Divider(),
           // Cuentas/Billeteras - carrusel
           _buildAccountsCarousel(),
+
+          const SizedBox(height: 24),
+
+          // Próximos gastos - scrolleable con filtro
+          _buildProximosGastosCompact(),
+
+          const SizedBox(height: 24),
+
+          // Acciones rápidas fijas
+          _buildQuickTransactionForm(),
+
           const SizedBox(height: 80), // Espacio para el FloatingActionButton
         ],
       ),
@@ -462,13 +487,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProximosGastos() {
-    // Usar _proximosGastos cargados en _loadData
+  Widget _buildProximosGastosCompact() {
+    // Filtrar gastos según el filtro seleccionado
+    final filteredGastos = _showOnlyPending
+        ? _proximosGastos.where((g) => !g.pagado).toList()
+        : _proximosGastos;
+
+    // Tomar solo los primeros 3 para el scroll
+    final displayGastos = filteredGastos.take(3).toList();
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header con título, filtro y botón agregar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -480,33 +513,191 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.black87,
                 ),
               ),
-              InkWell(
-                onTap: () => _navigateToAddFixedExpense(),
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6B73FF).withOpacity(0.1),
-                    shape: BoxShape.circle,
+              Row(
+                children: [
+                  // Filtro Todos/Pendientes
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildFilterButton('Pendientes', true),
+                        _buildFilterButton('Todos', false),
+                      ],
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.add,
-                    size: 20,
-                    color: Color(0xFF6B73FF),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => _navigateToAddFixedExpense(),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6B73FF).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.add,
+                        size: 20,
+                        color: Color(0xFF6B73FF),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          // Lista de gastos sin recuadros individuales
-          _proximosGastos.isEmpty
-              ? const Text(
-                  'No tienes gastos próximos.',
-                  style: TextStyle(color: Colors.grey),
+          const SizedBox(height: 12),
+          // Lista scrolleable de hasta 3 gastos
+          displayGastos.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(
+                      _showOnlyPending
+                          ? 'No tienes gastos pendientes.'
+                          : 'No tienes gastos próximos.',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ),
                 )
-              : _buildProximosGastosList(),
+              : SizedBox(
+                  height: 200, // Altura fija para mostrar ~3 items
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: displayGastos.length,
+                    separatorBuilder: (context, index) => const Divider(height: 16),
+                    itemBuilder: (context, index) {
+                      final gasto = displayGastos[index];
+                      final daysUntilDue = gasto.fechaVencimiento
+                          .difference(DateTime.now())
+                          .inDays;
+                      final isOverdue = daysUntilDue < 0;
+                      final isDueToday = daysUntilDue == 0;
+
+                      return Opacity(
+                        opacity: gasto.pagado ? 0.5 : 1.0,
+                        child: Row(
+                          children: [
+                            // Indicador de fecha
+                            _buildDateIndicator(gasto.fechaVencimiento, isOverdue),
+                            const SizedBox(width: 16),
+                            // Detalles del gasto
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _gastoFijoNames[gasto.idGasto] ?? gasto.detalle,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      decoration: gasto.pagado
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isOverdue
+                                        ? 'Vencido hace ${-daysUntilDue} día(s)'
+                                        : (isDueToday
+                                            ? 'Vence hoy'
+                                            : 'Vence en ${daysUntilDue + 1} día(s)'),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isOverdue ? Colors.red[700] : Colors.grey[600],
+                                      fontWeight: isOverdue || isDueToday
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Monto y botón de pago
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  _showFinancialValues
+                                      ? _formatFinancialValue(gasto.importe)
+                                      : '● ● ● ● ●',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                InkWell(
+                                  onTap: () => _toggleGastoPagado(
+                                    _proximosGastos.indexOf(gasto),
+                                    !gasto.pagado,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: gasto.pagado
+                                          ? const Color(0xFF6B73FF)
+                                          : Colors.transparent,
+                                      border: Border.all(
+                                        color: gasto.pagado
+                                            ? const Color(0xFF6B73FF)
+                                            : Colors.grey[400]!,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: gasto.pagado
+                                        ? const Icon(
+                                            Icons.check,
+                                            color: Colors.white,
+                                            size: 16,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterButton(String label, bool isPending) {
+    final isSelected = _showOnlyPending == isPending;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _showOnlyPending = isPending;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6B73FF) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? Colors.white : Colors.grey[700],
+          ),
+        ),
       ),
     );
   }
@@ -548,11 +739,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 160, // Reduced height for a more compact look
+          height: 117, // Reduced by 10%
           child: PageView.builder(
             controller: PageController(
-              viewportFraction: 0.9,
-            ), // Show part of next card
+              viewportFraction: 0.72,
+            ), // Reduced width by 20%
             itemCount: _accounts.length,
             onPageChanged: (index) {
               setState(() {
@@ -572,6 +763,366 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ],
     );
+  }
+
+  Widget _buildWeeklyExpensesSummary() {
+    final now = DateTime.now();
+
+    // Calculate totals for each week period
+    double week1Total = 0.0; // Next 7 days
+    double week2Total = 0.0; // Days 8-14
+    double week3PlusTotal = 0.0; // Days 15-31
+
+    List<ProximoGasto> week1Expenses = [];
+    List<ProximoGasto> week2Expenses = [];
+    List<ProximoGasto> week3PlusExpenses = [];
+
+    for (var gasto in _proximosGastos) {
+      if (gasto.pagado) continue; // Skip already paid expenses
+
+      final daysUntilDue = gasto.fechaVencimiento.difference(now).inDays;
+
+      if (daysUntilDue >= 0 && daysUntilDue <= 7) {
+        week1Total += gasto.importe;
+        week1Expenses.add(gasto);
+      } else if (daysUntilDue >= 8 && daysUntilDue <= 14) {
+        week2Total += gasto.importe;
+        week2Expenses.add(gasto);
+      } else if (daysUntilDue >= 15 && daysUntilDue <= 31) {
+        week3PlusTotal += gasto.importe;
+        week3PlusExpenses.add(gasto);
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Gastos fijos por período',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildWeeklyExpenseBox(
+                title: 'Semana 1',
+                subtitle: 'Próximos 7 días',
+                amount: week1Total,
+                color: Colors.red,
+                expenses: week1Expenses,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildWeeklyExpenseBox(
+                title: 'Semana 2',
+                subtitle: 'Días 8-14',
+                amount: week2Total,
+                color: Colors.orange,
+                expenses: week2Expenses,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildWeeklyExpenseBox(
+                title: 'Semanas 3-5',
+                subtitle: 'Días 15-31',
+                amount: week3PlusTotal,
+                color: Colors.blue,
+                expenses: week3PlusExpenses,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeeklyExpenseBox({
+    required String title,
+    required String subtitle,
+    required double amount,
+    required Color color,
+    required List<ProximoGasto> expenses,
+  }) {
+    return InkWell(
+      onTap: expenses.isEmpty ? null : () => _showWeeklyExpensesDetail(title, expenses),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: color.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: color.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _showFinancialValues
+                  ? _formatFinancialValue(amount)
+                  : '● ● ● ●',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${expenses.length} gasto${expenses.length != 1 ? 's' : ''}',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showWeeklyExpensesDetail(String title, List<ProximoGasto> expenses) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Title
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  // Expense list
+                  Expanded(
+                    child: ListView.separated(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(20),
+                      itemCount: expenses.length,
+                      separatorBuilder: (context, index) => const Divider(height: 24),
+                      itemBuilder: (context, index) {
+                        final gasto = expenses[index];
+                        final daysUntilDue = gasto.fechaVencimiento
+                            .difference(DateTime.now())
+                            .inDays;
+                        final isOverdue = daysUntilDue < 0;
+                        final isDueToday = daysUntilDue == 0;
+
+                        return Row(
+                          children: [
+                            // Date indicator
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: isOverdue
+                                    ? Colors.red.withValues(alpha: 0.1)
+                                    : Colors.deepPurple.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '${gasto.fechaVencimiento.day}',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: isOverdue ? Colors.red : Colors.deepPurple,
+                                    ),
+                                  ),
+                                  Text(
+                                    _getMonthAbbreviation(gasto.fechaVencimiento.month),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isOverdue ? Colors.red : Colors.deepPurple,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            // Expense details
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _gastoFijoNames[gasto.idGasto] ?? gasto.detalle,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isOverdue
+                                        ? 'Vencido hace ${-daysUntilDue} día(s)'
+                                        : (isDueToday
+                                            ? 'Vence hoy'
+                                            : 'Vence en ${daysUntilDue + 1} día(s)'),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isOverdue ? Colors.red[700] : Colors.grey[600],
+                                      fontWeight: isOverdue || isDueToday
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Amount and pay button
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  _showFinancialValues
+                                      ? _formatFinancialValue(gasto.importe)
+                                      : '● ● ● ●',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _quickPayExpense(gasto);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.deepPurple,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                  ),
+                                  child: const Text(
+                                    'Pagar',
+                                    style: TextStyle(fontSize: 12, color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _getMonthAbbreviation(int month) {
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return months[month - 1];
+  }
+
+  void _quickPayExpense(ProximoGasto gasto) {
+    // Find the index in the main list
+    final index = _proximosGastos.indexWhere((g) => g.idObligacion == gasto.idObligacion);
+    if (index != -1) {
+      _toggleGastoPagado(index, true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gasto marcado como pagado'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildProximosGastosList() {
@@ -686,7 +1237,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return InkWell(
       onTap: () => _showAccountTransactions(cuenta),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8),
+        margin: const EdgeInsets.only(right: 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [color.withOpacity(0.8), color],
@@ -703,45 +1254,48 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    cuenta.name,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                  Expanded(
+                    child: Text(
+                      cuenta.name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Icon(icono, color: Colors.white, size: 28),
+                  Icon(icono, color: Colors.white, size: 20),
                 ],
               ),
               Text(
                 cuenta.type.displayName,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 10,
                   color: Colors.white.withOpacity(0.8),
                 ),
               ),
               const Spacer(),
               const Text(
                 'Saldo Actual',
-                style: TextStyle(fontSize: 14, color: Colors.white70),
+                style: TextStyle(fontSize: 10, color: Colors.white70),
               ),
               Text(
                 _showFinancialValues
                     ? _formatFinancialValue(saldo)
                     : '● ● ● ● ●',
                 style: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
-                  letterSpacing: 1.2,
+                  letterSpacing: 1.0,
                 ),
               ),
             ],

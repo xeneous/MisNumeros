@@ -580,7 +580,11 @@ class DatabaseService {
   // Nueva Cuenta operations (new schema)
   Future<int> insertCuenta(Cuenta cuenta) async {
     final db = await database;
-    return await db.insert(cuentasTable, cuenta.toMap());
+    return await db.insert(
+      cuentasTable,
+      cuenta.toMap(),
+      conflictAlgorithm: sql.ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Cuenta>> getCuentas(String userId) async {
@@ -1303,12 +1307,22 @@ class DatabaseService {
 
     int categoryId = await _ensureDefaultCategory(fixedExpense.userId);
 
+    // Parse idGasto from the fixedExpense.id string
+    // If it's a numeric string, use it; otherwise use 0 for new expenses
+    int idGasto = 0;
+    try {
+      idGasto = int.parse(fixedExpense.id);
+    } catch (e) {
+      // If parsing fails, it's a UUID (new expense), so keep idGasto as 0
+      print('DatabaseService: fixedExpense.id is not numeric (${fixedExpense.id}), treating as new expense');
+    }
+
     print(
-      'DatabaseService: Converting FixedExpense to GastoFijo - Account UUID: ${fixedExpense.accountId}, Account ID: $accountId, Category ID: $categoryId',
+      'DatabaseService: Converting FixedExpense to GastoFijo - ID: $idGasto, Account UUID: ${fixedExpense.accountId}, Account ID: $accountId, Category ID: $categoryId',
     );
 
     return GastoFijo(
-      idGasto: 0, // Will be auto-incremented
+      idGasto: idGasto, // Use existing ID for updates, 0 for new expenses
       userId: fixedExpense.userId,
       idCuenta: accountId,
       idCategoria: categoryId,
