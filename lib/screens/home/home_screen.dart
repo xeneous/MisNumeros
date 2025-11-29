@@ -78,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   List<String> _topExpenseDescriptions = [];
   List<String> _topIncomeDescriptions = [];
-  int _currentPage = 0;
   bool _showOnlyPending = true; // Filtro para próximos gastos
 
   @override
@@ -390,20 +389,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           // Cuentas/Billeteras - carrusel
           _buildAccountsCarousel(),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // Próximos gastos - scrolleable con filtro
-          _buildProximosGastosCompact(),
-
-          const SizedBox(height: 24),
-
-          // Acciones rápidas fijas
+          // Formulario de carga de ingresos/gastos
           _buildQuickTransactionForm(),
+
+          const SizedBox(height: 16),
+
+          // Próximos gastos
+          _buildProximosGastosCompact(),
 
           const SizedBox(height: 80), // Espacio para el FloatingActionButton
         ],
@@ -421,17 +420,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     return InkWell(
       onTap: isDisponible ? _showAccountBreakdown : null,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Container(
-            height: 65,
-            padding: const EdgeInsets.all(16),
+            height: 55,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withOpacity(0.2)),
+              color: color.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withValues(alpha: 0.15), width: 1),
             ),
             child: Center(
               child: FittedBox(
@@ -443,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             : _formatFinancialValue(amount ?? 0.0))
                       : '● ● ● ● ●',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: color,
                   ),
@@ -453,32 +452,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
           Positioned(
-            top: -10,
-            left: 12,
+            top: -8,
+            left: 10,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               color: Theme.of(context).scaffoldBackgroundColor,
               child: Text(
                 title,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: color,
+                  color: color.withValues(alpha: 0.8),
                 ),
               ),
             ),
           ),
           if (isDisponible)
             Positioned(
-              top: -10,
-              right: 12,
+              top: -8,
+              right: 10,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 color: Theme.of(context).scaffoldBackgroundColor,
                 child: Icon(
                   Icons.info_outline,
-                  size: 16,
-                  color: color.withOpacity(0.6),
+                  size: 14,
+                  color: color.withValues(alpha: 0.5),
                 ),
               ),
             ),
@@ -564,12 +563,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 )
-              : SizedBox(
-                  height: 200, // Altura fija para mostrar ~3 items
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: displayGastos.length,
-                    separatorBuilder: (context, index) => const Divider(height: 16),
+              : ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  itemCount: displayGastos.length,
+                  separatorBuilder: (context, index) => const Divider(height: 16),
                     itemBuilder: (context, index) {
                       final gasto = displayGastos[index];
                       final daysUntilDue = gasto.fechaVencimiento
@@ -670,7 +669,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       );
                     },
                   ),
-                ),
         ],
       ),
     );
@@ -739,28 +737,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: 117, // Reduced by 10%
-          child: PageView.builder(
-            controller: PageController(
-              viewportFraction: 0.72,
-            ), // Reduced width by 20%
+          height: 89, // Reduced 15% (105 * 0.85)
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
             itemCount: _accounts.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
-            },
             itemBuilder: (context, index) {
               final cuenta = _accounts[index];
               final saldo = _accountBalances[cuenta.id] ?? 0.0;
-              return _buildAccountCard(cuenta, saldo);
+              return SizedBox(
+                width: MediaQuery.of(context).size.width * 0.49, // Reduced 15% (0.58 * 0.85)
+                child: _buildAccountCard(cuenta, saldo),
+              );
             },
           ),
         ),
-        if (_accounts.length > 1) ...[
-          const SizedBox(height: 12),
-          _buildPageIndicator(_accounts.length),
-        ],
       ],
     );
   }
@@ -1254,7 +1245,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(8), // 10 * 0.85 ≈ 8
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1265,62 +1256,49 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     child: Text(
                       cuenta.name,
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 12, // 14 * 0.85 ≈ 12
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Icon(icono, color: Colors.white, size: 20),
+                  Icon(icono, color: Colors.white, size: 15), // 18 * 0.85 ≈ 15
                 ],
               ),
               Text(
                 cuenta.type.displayName,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 8, // 9 * 0.85 ≈ 8
                   color: Colors.white.withOpacity(0.8),
                 ),
               ),
               const Spacer(),
-              const Text(
-                'Saldo Actual',
-                style: TextStyle(fontSize: 10, color: Colors.white70),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Saldo Actual',
+                  style: TextStyle(fontSize: 8, color: Colors.white70), // 9 * 0.85 ≈ 8
+                ),
               ),
-              Text(
-                _showFinancialValues
-                    ? _formatFinancialValue(saldo)
-                    : '● ● ● ● ●',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 1.0,
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  _showFinancialValues
+                      ? _formatFinancialValue(saldo)
+                      : '● ● ● ● ●',
+                  style: const TextStyle(
+                    fontSize: 14, // 16 * 0.85 ≈ 14
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.7, // 0.8 * 0.85 ≈ 0.7
+                  ),
                 ),
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildPageIndicator(int pageCount) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(pageCount, (index) {
-        return Container(
-          width: 8,
-          height: 8,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            color: _currentPage == index
-                ? const Color(0xFF6B73FF)
-                : Colors.grey[300],
-          ),
-        );
-      }),
     );
   }
 

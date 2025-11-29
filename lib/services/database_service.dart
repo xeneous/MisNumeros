@@ -1275,27 +1275,20 @@ class DatabaseService {
   Future<GastoFijo> _convertFixedExpenseToGastoFijo(
     FixedExpense fixedExpense,
   ) async {
-    // Get account local ID
+    // Get account local ID from the old "cuentas" table
     int accountId;
     if (fixedExpense.accountId != null) {
-      // Find the account by UUID and get its local ID
-      final account = await getAccount(fixedExpense.accountId!);
-      if (account != null) {
-        // Get the local ID from SQLite by querying with the UUID
-        final db = await database;
-        final List<Map<String, dynamic>> results = await db.query(
-          accountsTable,
-          columns: ['id_cuenta'],
-          where: 'id = ?',
-          whereArgs: [account.id],
-          limit: 1,
-        );
-        if (results.isNotEmpty) {
-          accountId = results.first['id_cuenta'] as int;
-        } else {
-          // Fallback to default account if not found
-          accountId = await _ensureDefaultAccount(fixedExpense.userId);
-        }
+      // Find the account by UUID and get its local ID from the old cuentas table
+      final db = await database;
+      final List<Map<String, dynamic>> results = await db.query(
+        cuentasTable,
+        columns: ['id_cuenta'],
+        where: 'user_id = ? AND nombre = (SELECT name FROM $accountsTable WHERE id = ?)',
+        whereArgs: [fixedExpense.userId, fixedExpense.accountId],
+        limit: 1,
+      );
+      if (results.isNotEmpty) {
+        accountId = results.first['id_cuenta'] as int;
       } else {
         // Fallback to default account if not found
         accountId = await _ensureDefaultAccount(fixedExpense.userId);
