@@ -3,8 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/database_service.dart';
-import '../../models/gasto_fijo.dart';
-// import '../../models/fixed_expense.dart'; // Use GastoFijo model
+import '../../models/fixed_expense.dart';
 import '../../widgets/fixed_expenses/fixed_expense_list_item.dart';
 import '../../widgets/fixed_expenses/add_fixed_expense_fab.dart';
 
@@ -16,7 +15,7 @@ class FixedExpensesScreen extends StatefulWidget {
 }
 
 class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
-  List<GastoFijo> _fixedExpenses = [];
+  List<FixedExpense> _fixedExpenses = [];
   bool _isLoading = true;
   double _totalMonthlyExpenses = 0.0;
   double _totalWeeklyExpenses = 0.0;
@@ -58,10 +57,10 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
           if (expense.isActive) {
             // Safety check for infinite values
             final amount = expense.amount.isFinite ? expense.amount : 0.0;
-            
-            if (expense.frecuencia == 'MENSUAL') {
+
+            if (expense.frequency == ExpenseFrequency.monthly) {
               monthlyTotal += amount;
-            } else if (expense.frecuencia == 'SEMANAL') {
+            } else if (expense.frequency == ExpenseFrequency.weekly) {
               weeklyTotal += amount;
             }
           }

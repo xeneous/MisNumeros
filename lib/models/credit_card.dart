@@ -85,6 +85,24 @@ class CreditCard {
     );
   }
 
+  factory CreditCard.fromSupabase(Map<String, dynamic> map) {
+    final creditLimit = (map['credit_limit'] as num?)?.toDouble() ?? 0.0;
+    final currentBalance = (map['current_balance'] as num?)?.toDouble() ?? 0.0;
+    return CreditCard(
+      id: map['id'],
+      userId: map['user_id'],
+      name: map['name'],
+      alias: map['alias'],
+      creditLimit: creditLimit,
+      closingDay: map['closing_day']?.toInt() ?? 1,
+      currentBalance: currentBalance,
+      availableCredit: creditLimit - currentBalance,
+      isActive: true,
+      createdAt: DateTime.parse(map['created_at']),
+      updatedAt: DateTime.parse(map['updated_at']),
+    );
+  }
+
   // Helper method to get next closing date
   DateTime getNextClosingDate() {
     final now = DateTime.now();

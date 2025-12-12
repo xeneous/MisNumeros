@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
+import 'config/supabase_config.dart';
 
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
@@ -20,8 +22,19 @@ import 'screens/home/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializar Supabase
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
+  );
+  
+  // Inicializar Firebase (temporal durante migración)
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
   print('App starting...');
+  print('Supabase initialized: ${Supabase.instance.client.auth.currentUser != null ? "User logged in" : "No user"}');
+  
   runApp(const MyApp());
 }
 

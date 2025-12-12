@@ -65,23 +65,16 @@ class _EmailRegisterFormState extends State<EmailRegisterForm> {
             controller: _emailController,
             decoration: InputDecoration(
               labelText: 'Correo electrónico',
+              hintText: 'ejemplo@correo.com',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
               prefixIcon: const Icon(Icons.email),
             ),
             keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Por favor ingresa tu correo electrónico';
-              }
-              if (!RegExp(
-                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-              ).hasMatch(value)) {
-                return 'Ingresa un correo electrónico válido';
-              }
-              return null;
-            },
+            autocorrect: false,
+            textInputAction: TextInputAction.next,
+            // NO VALIDATION - accept any input
           ),
           const SizedBox(height: 16),
 

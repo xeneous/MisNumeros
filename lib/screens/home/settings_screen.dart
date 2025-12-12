@@ -175,19 +175,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      final csvData = await dbService.exportAllTablesToCsv();
+      // CSV export not implemented for Supabase yet
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Exportación CSV aún no disponible para Supabase'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+
+      /* Legacy code
+      final csvData = await dbService.exportAllTablesToCsv(currentUser.id);
       if (csvData.isEmpty) {
         messenger.showSnackBar(
           const SnackBar(content: Text('No hay datos para exportar.')),
         );
         return;
       }
+      */
 
+      /* Legacy export code
       final List<XFile> files = [];
       for (var entry in csvData.entries) {
         files.add(
           XFile.fromData(
-            // Convert List<int> to Uint8List
             Uint8List.fromList(entry.value),
             name: '${entry.key}.csv',
             mimeType: 'text/csv',
@@ -196,6 +207,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       await Share.shareXFiles(files, subject: 'Exportación de Datos DayByDay');
+      */
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Error al exportar: $e')));
     }

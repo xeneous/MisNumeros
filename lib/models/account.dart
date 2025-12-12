@@ -32,6 +32,8 @@ class Account extends Equatable {
   final String? alias;
   final AccountType type;
   final String moneda;
+
+  String get currency => moneda;
   final double initialBalance;
   final double currentBalance;
   final bool isDefault;
@@ -136,6 +138,23 @@ class Account extends Equatable {
       isDeletable: map['isDeletable'] == 1,
       createdAt: DateTime.parse(map['createdAt']),
       updatedAt: DateTime.parse(map['updatedAt']),
+    );
+  }
+
+  factory Account.fromSupabase(Map<String, dynamic> map) {
+    return Account(
+      id: map['id'],
+      userId: map['user_id'],
+      name: map['name'],
+      alias: map['alias'],
+      type: AccountType.fromName(map['account_type']),
+      moneda: map['currency'] ?? 'ARS',
+      initialBalance: (map['initial_balance'] as num?)?.toDouble() ?? 0.0,
+      currentBalance: (map['current_balance'] as num?)?.toDouble() ?? 0.0,
+      isDefault: map['is_default'] ?? false,
+      isDeletable: map['is_deletable'] ?? true,
+      createdAt: DateTime.parse(map['created_at']),
+      updatedAt: DateTime.parse(map['updated_at']),
     );
   }
 

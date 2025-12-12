@@ -1,0 +1,205 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/C:/Users/Daniel/.gradle/wrapper/dists/gradle-8.12-all/ejduaidbjup3bmmkhw3rie4zb/gradle-8.12/lib/native-platform-0.22-milestone-27.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+> Task :gradle:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle:compileKotlin UP-TO-DATE
+> Task :gradle:compileJava NO-SOURCE
+> Task :gradle:compileGroovy NO-SOURCE
+> Task :gradle:pluginDescriptors UP-TO-DATE
+> Task :gradle:processResources UP-TO-DATE
+> Task :gradle:classes UP-TO-DATE
+> Task :gradle:jar UP-TO-DATE
+
+> Task :app:signingReport
+Variant: debug
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+Variant: release
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+Variant: profile
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :app_links:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :cloud_firestore:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :firebase_auth:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :firebase_core:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :flutter_plugin_android_lifecycle:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :geolocator_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :google_sign_in_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :image_picker_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :path_provider_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :share_plus:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :shared_preferences_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :sqflite_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+> Task :url_launcher_android:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Daniel\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: A3:79:65:21:84:D8:90:2E:BD:93:0F:0F:AA:8D:DC:D9
+SHA1: 42:41:10:04:F6:DC:8B:E4:2F:99:9B:56:B3:A4:A9:74:13:6A:C5:E6
+SHA-256: 33:D6:C9:27:1D:0E:BE:4D:E4:C9:C0:6E:DA:46:79:BF:45:44:40:15:5D:45:71:6F:82:1E:12:63:AD:48:D9:43
+Valid until: lunes, 6 de septiembre de 2055
+----------
+
+[Incubating] Problems report is available at: file:///C:/Users/Daniel/StudioProjects/posicion/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.12/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2s
+18 actionable tasks: 14 executed, 4 up-to-date

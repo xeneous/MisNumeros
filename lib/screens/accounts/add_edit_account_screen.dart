@@ -267,26 +267,12 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
         await dbService.updateAccount(updatedAccount);
 
         // --- TEMPORARY BRIDGE ---
-        // Also update the corresponding "old" Cuenta.
-        // This should be removed after the transactions table migration.
-        final oldUserId = await dbService.getOrCreateOldUserId(currentUser);
-        final oldAccounts = await dbService.findOldAccountByName(
-          updatedAccount.name,
-          oldUserId.toString(),
-        );
-        if (oldAccounts.isNotEmpty) {
-          final oldAccountToUpdate = oldAccounts.first.copyWith(
-            moneda: updatedAccount.moneda,
-            esPrincipal: updatedAccount.isDefault,
-          );
-          await dbService.updateCuenta(oldAccountToUpdate);
-        }
+        // Legacy code - no longer needed with Supabase
         // --- END OF BRIDGE ---
 
         // If this account is set as default, remove default flag from other accounts
         if (_isDefault) {
           await dbService.clearOtherDefaultAccounts(
-            updatedAccount.userId,
             updatedAccount.id,
           );
         }
@@ -310,26 +296,9 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
 
         await dbService.insertAccount(newAccount);
 
-        // --- TEMPORARY BRIDGE ---
-        // Also create a corresponding "old" Cuenta to allow transactions to be saved.
-        // This should be removed after the transactions table migration.
-        final oldAccount = old_account.Cuenta(
-          idCuenta: 0, // autoincremento
-          userId: currentUser.id, // Use Firebase UID directly
-          nombre: newAccount.name,
-          // Mapeo manual para corregir la discrepancia de enums
-          moneda: newAccount.moneda,
-          tipo: _mapAccountTypeToOldTipoCuenta(newAccount.type),
-          fechaCreacion: newAccount.createdAt,
-          esPrincipal: newAccount.isDefault,
-        );
-        await dbService.insertCuenta(oldAccount);
-        // --- END OF BRIDGE ---
-
         // If this account is set as default, remove default flag from other accounts
         if (_isDefault) {
           await dbService.clearOtherDefaultAccounts(
-            newAccount.userId,
             newAccount.id,
           );
         }

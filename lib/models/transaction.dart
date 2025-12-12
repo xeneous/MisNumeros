@@ -22,6 +22,9 @@ class Transaction {
   final double amount;
   final String? description;
   final String? category;
+
+  String? get categoryId => category;
+  String? get notes => description;
   final DateTime date;
   final TransactionStatus status;
 
@@ -188,6 +191,40 @@ class Transaction {
       updatedAt: DateTime.parse(map['updatedAt']),
       currency: map['currency'],
       location: map['location'],
+    );
+  }
+
+  factory Transaction.fromSupabase(Map<String, dynamic> map) {
+    final typeStr = map['transaction_type'] as String?;
+    TransactionType type;
+    if (typeStr == 'income') {
+      type = TransactionType.income;
+    } else {
+      type = TransactionType.expense;
+    }
+
+    return Transaction(
+      id: map['id'],
+      userId: map['user_id'],
+      type: type,
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
+      description: map['description'],
+      category: map['category_id'],
+      date: DateTime.parse(map['transaction_date']),
+      status: TransactionStatus.completed,
+      accountId: map['account_id'],
+      creditCardId: null,
+      installments: null,
+      totalAmount: null,
+      interestAmount: null,
+      currentInstallment: null,
+      isSharedExpense: false,
+      participants: null,
+      participantAmounts: null,
+      createdAt: DateTime.parse(map['created_at']),
+      updatedAt: DateTime.parse(map['updated_at']),
+      currency: null,
+      location: null,
     );
   }
 

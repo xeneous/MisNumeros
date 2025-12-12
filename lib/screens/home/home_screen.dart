@@ -13,7 +13,6 @@ import '../../models/fixed_expense.dart'; // Needed for ExpenseFrequency enum
 import '../../models/proximo_gasto.dart';
 import '../../models/account.dart';
 import '../../models/user.dart';
-import '../../models/gasto_fijo.dart';
 import '../../models/transaccion.dart' as tx; // Import old Transaccion model
 import '../../models/transaction.dart'
     as new_tx; // Import NEW Transaction model
@@ -2833,8 +2832,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     for (final gastoFijo in gastosFijos) {
       if (!gastoFijo.activo) continue;
 
-      // Store the name for later use
-      gastoNames[gastoFijo.idGasto] = gastoFijo.nombre;
+      // Store the name for later use (hash String ID to int for legacy model)
+      final gastoIdHash = gastoFijo.idGasto.hashCode.abs();
+      gastoNames[gastoIdHash] = gastoFijo.nombre;
 
       // Calculate next due date based on frequency
       DateTime nextDueDate = _calculateNextDueDate(gastoFijo);
@@ -2848,8 +2848,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
         proximosGastos.add(
           ProximoGasto(
-            idObligacion: gastoFijo.idGasto,
-            idGasto: gastoFijo.idGasto,
+            idObligacion: gastoIdHash,
+            idGasto: gastoIdHash,
             montoEstimado: gastoFijo.montoCuotas,
             fechaVencimiento: nextDueDate,
             estado: isPaidToday
@@ -2872,11 +2872,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return proximosGastos;
   }
 
-  DateTime _calculateNextDueDate(GastoFijo gastoFijo) {
+  DateTime _calculateNextDueDate(FixedExpense gastoFijo) {
     final now = DateTime.now();
 
     if (gastoFijo.frecuencia == 'MENSUAL') {
-      final targetDay = gastoFijo.diaMes ?? 1;
+      final targetDay = gastoFijo.diaMes;
       var nextDate = DateTime(now.year, now.month, targetDay);
 
       // If the date has passed this month, move to next month
@@ -2886,7 +2886,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       return nextDate;
     } else if (gastoFijo.frecuencia == 'SEMANAL') {
-      final targetWeekday = gastoFijo.diaSemana ?? 1;
+      final targetWeekday = gastoFijo.diaSemana;
       var nextDate = now;
 
       // Find next occurrence of the target weekday
@@ -2948,7 +2948,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final userId = currentUser.id;
       if (userId.isEmpty) return 0.0;
 
-      final List<GastoFijo> fixedExpenses = await dbService.getGastosFijos(
+      final List<FixedExpense> fixedExpenses = await dbService.getGastosFijos(
         userId,
       );
       // For now, return 0.0 since we need to fix the user model integration

@@ -92,4 +92,22 @@ class Categoria {
       activa: map['activa'] == 1,
     );
   }
+
+  factory Categoria.fromSupabase(Map<String, dynamic> map) {
+    final tipoStr = map['category_type'] as String?;
+    final tipo = tipoStr == 'income' ? TipoCategoria.ingreso : TipoCategoria.gasto;
+
+    return Categoria(
+      idCategoria: 0,
+      userId: map['user_id'],
+      nombre: map['name'],
+      tipo: tipo,
+      colorHex: map['color'] ?? '#6B73FF',
+      icono: map['icon'] ?? 'category',
+      descripcion: null,
+      padreId: map['parent_id'] != null ? int.tryParse(map['parent_id'].toString()) : null,
+      fechaCreacion: DateTime.parse(map['created_at']),
+      activa: true,
+    );
+  }
 }

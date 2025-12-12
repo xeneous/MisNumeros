@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../models/gasto_fijo.dart';
 import '../../models/fixed_expense.dart';
 import '../../screens/fixed_expenses/add_edit_fixed_expense_screen.dart';
 import '../../services/database_service.dart';
 
 class FixedExpenseListItem extends StatelessWidget {
-  final GastoFijo expense;
+  final FixedExpense expense;
   final VoidCallback onExpenseUpdated;
 
   static final _currencyFormat = NumberFormat.currency(
@@ -27,10 +26,10 @@ class FixedExpenseListItem extends StatelessWidget {
     // Safety check for infinite or NaN amounts which can crash rendering
     final safeAmount = expense.amount.isFinite ? expense.amount : 0.0;
     final formattedAmount = _currencyFormat.format(safeAmount);
-    
+
     // Calculate annual amount safely
-    final annualAmount = expense.frecuencia == 'MENSUAL' 
-        ? safeAmount * 12 
+    final annualAmount = expense.frequency == ExpenseFrequency.monthly
+        ? safeAmount * 12
         : safeAmount * 52;
     final safeAnnualAmount = annualAmount.isFinite ? annualAmount : 0.0;
 
@@ -187,8 +186,8 @@ class FixedExpenseListItem extends StatelessWidget {
                   onChanged: (value) async {
                     try {
                       final dbService = DatabaseService();
-                      final updatedExpense = expense.copyWith(activo: value);
-                      await dbService.updateGastoFijo(updatedExpense);
+                      final updatedExpense = expense.copyWith(isActive: value);
+                      await dbService.updateFixedExpense(updatedExpense);
 
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -312,7 +311,7 @@ class FixedExpenseListItem extends StatelessWidget {
 
               try {
                 final dbService = DatabaseService();
-                await dbService.deleteGastoFijo(expense.idGasto);
+                await dbService.deleteFixedExpense(expense.id);
 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(

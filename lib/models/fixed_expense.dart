@@ -21,6 +21,21 @@ class FixedExpense {
   final int dayOfMonth; // Para gastos mensuales (1-31)
   final int dayOfWeek; // Para gastos semanales (1=lunes, 7=domingo)
   final String category;
+
+  // Getters for compatibility with legacy code
+  String get categoryId => category;
+  DateTime get startDate => createdAt;
+  DateTime? get endDate => null;
+  String get nombre => name;
+  String? get descripcion => description;
+  double get montoCuotas => amount;
+  String get frecuencia => frequency == ExpenseFrequency.monthly ? 'MENSUAL' : 'SEMANAL';
+  int get diaMes => dayOfMonth;
+  int get diaSemana => dayOfWeek;
+  bool get activo => isActive;
+  DateTime get fechaInicio => createdAt;
+  String get idGasto => id;
+
   final String? accountId; // Cuenta asociada para el pago
   final bool isActive;
   final DateTime createdAt;
@@ -126,6 +141,34 @@ class FixedExpense {
       lastPaymentDate: map['lastPaymentDate'] != null
           ? DateTime.parse(map['lastPaymentDate'])
           : null,
+    );
+  }
+
+  factory FixedExpense.fromSupabase(Map<String, dynamic> map) {
+    final frequencyStr = map['frequency'] as String?;
+    ExpenseFrequency frequency;
+    if (frequencyStr == 'weekly') {
+      frequency = ExpenseFrequency.weekly;
+    } else {
+      frequency = ExpenseFrequency.monthly;
+    }
+
+    return FixedExpense(
+      id: map['id'],
+      userId: map['user_id'],
+      name: map['name'],
+      description: null,
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
+      frequency: frequency,
+      paymentType: PaymentType.onDay,
+      dayOfMonth: map['day_of_month']?.toInt() ?? 1,
+      dayOfWeek: map['day_of_week']?.toInt() ?? 1,
+      category: map['category_id'] ?? 'Otros',
+      accountId: map['account_id'],
+      isActive: map['is_active'] ?? true,
+      createdAt: DateTime.parse(map['created_at']),
+      updatedAt: DateTime.parse(map['updated_at']),
+      lastPaymentDate: null,
     );
   }
 

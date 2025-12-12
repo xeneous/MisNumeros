@@ -25,7 +25,7 @@ class _MercadoPagoAuthScreenState extends State<MercadoPagoAuthScreen> {
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
             // Escuchamos la URL de redirección
-            if (request.url.startsWith('https://daybyday.app/mp-callback')) {
+            if (request.url.startsWith('https://misnumeros.app/mp-callback')) {
               final uri = Uri.parse(request.url);
               final code = uri.queryParameters['code'];
               if (code != null) {

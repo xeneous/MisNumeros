@@ -6,7 +6,7 @@ class MercadoPagoService {
       'TU_CLIENT_SECRET'; // <-- Pega aquí tu Client Secret
 
   // Esta es la URL a la que Mercado Pago redirigirá al usuario. Debe coincidir con la que configuraste en el panel de MP.
-  final String _redirectUri = 'https://daybyday.app/mp-callback';
+  final String _redirectUri = 'https://misnumeros.app/mp-callback';
 
   String getAuthorizationUrl() {
     final url =
