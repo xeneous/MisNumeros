@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final currentUser = authProvider.user;
       if (currentUser == null) throw Exception("Usuario no encontrado");
 
-      // Fetch all accounts and then filter by the current display mode
+      // Fetch accounts first (needed for filtering)
       print('HomeScreen: Fetching accounts for user ${currentUser.id}');
       final allAccounts = await dbService.getAccounts(currentUser.id);
       print('HomeScreen: Found ${allAccounts.length} accounts');
@@ -183,6 +183,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'HomeScreen: Filtered to ${accounts.length} accounts for display mode $_displayMode',
       );
 
+      // Calculate balances and totals synchronously (no await needed)
       final balances = await _calculateBalances(accounts);
       _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(accounts);
 
@@ -191,55 +192,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'HomeScreen: Total balances by currency: $_totalBalancesByCurrency',
       );
 
-      // Fetch daily transactions
+      // Fetch all other data in parallel
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
 
-      // Fetch daily transactions from Firestore
       print(
-        'HomeScreen: Fetching daily transactions from $startOfDay to $endOfDay',
-      );
-      final dailyTransactions = await dbService.getTransactions(
-        userId: currentUser.id,
-        fromDate: startOfDay,
-        toDate: endOfDay,
-      );
-      print(
-        'HomeScreen: Fetched ${dailyTransactions.length} daily transactions',
+        'HomeScreen: Fetching data in parallel...',
       );
 
-      List<String> topExpenses = [];
-      List<String> topIncomes = [];
-
-      if (currentUser.id.isNotEmpty) {
-        topExpenses = await dbService.getTopTransactionDescriptions(
-          currentUser.id, // Use Firebase UID directly
+      final results = await Future.wait([
+        // Daily transactions
+        dbService.getTransactions(
+          userId: currentUser.id,
+          fromDate: startOfDay,
+          toDate: endOfDay,
+        ),
+        // Top expense descriptions
+        dbService.getTopTransactionDescriptions(
+          currentUser.id,
           tx.TipoTransaccion.gasto,
-        );
-        topIncomes = await dbService.getTopTransactionDescriptions(
-          currentUser.id, // Use Firebase UID directly
+        ),
+        // Top income descriptions
+        dbService.getTopTransactionDescriptions(
+          currentUser.id,
           tx.TipoTransaccion.ingreso,
-        );
-      } else {
-        // Log a warning if localId is missing after login. This shouldn't happen with the new logic.
-        print(
-          'ADVERTENCIA: No se pudo obtener el ID de usuario local. Algunas funciones estarán deshabilitadas.',
-        );
-      }
+        ),
+        // Próximos gastos
+        _generateProximosGastosFromFixed(currentUser.id),
+      ]);
+
+      final dailyTransactions = results[0] as List<new_tx.Transaction>;
+      final topExpenses = results[1] as List<String>;
+      final topIncomes = results[2] as List<String>;
+      final proximosGastos = results[3] as List<ProximoGasto>;
+
+      print('HomeScreen: Fetched ${dailyTransactions.length} daily transactions');
+      print('HomeScreen: Generated ${proximosGastos.length} próximos gastos from fixed expenses');
 
       // Calculate daily limit
       final dailyLimit = _calculateDailyLimit(
         _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
       );
-
-      // Generate próximos gastos dynamically from gastos fijos
-      // This ensures newly created fixed expenses appear immediately
-      final proximosGastos = await _generateProximosGastosFromFixed(currentUser.id);
-      print('HomeScreen: Generated ${proximosGastos.length} próximos gastos from fixed expenses');
-
-      // No need for Future.wait here as we await individually
-      // final results = await Future.wait([accountsFuture, proximosGastosFuture]);
 
       if (mounted) {
         setState(() {

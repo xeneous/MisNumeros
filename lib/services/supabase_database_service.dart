@@ -125,6 +125,35 @@ class SupabaseDatabaseService {
     }
   }
 
+  /// Helper method to update account balance by adding an amount (private)
+  /// Use positive amount for income, negative for expenses
+  Future<void> _updateAccountBalance(String accountId, double amountDelta) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+
+    try {
+      // Get current account
+      final response = await _client
+          .from('accounts')
+          .select('current_balance')
+          .eq('id', accountId)
+          .eq('user_id', currentUserId!)
+          .single();
+
+      final currentBalance = (response['current_balance'] as num?)?.toDouble() ?? 0.0;
+      final newBalance = currentBalance + amountDelta;
+
+      // Update balance
+      await _client
+          .from('accounts')
+          .update({'current_balance': newBalance})
+          .eq('id', accountId)
+          .eq('user_id', currentUserId!);
+    } catch (e) {
+      print('Error updating account balance: $e');
+      rethrow;
+    }
+  }
+
   // ============================================
   // CREDIT CARDS
   // ============================================
@@ -615,6 +644,7 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
+      // Insert the transaction
       final response = await _client
           .from('transactions')
           .insert({
@@ -630,6 +660,16 @@ class SupabaseDatabaseService {
           .select()
           .single();
 
+      // Update account balance if accountId is provided
+      if (transaction.accountId != null) {
+        await _updateAccountBalance(
+          transaction.accountId!,
+          transaction.type == new_tx.TransactionType.income
+            ? transaction.amount
+            : -transaction.amount,
+        );
+      }
+
       return new_tx.Transaction.fromSupabase(response);
     } catch (e) {
       print('Error inserting transaction: $e');
@@ -642,6 +682,17 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
+      // Get the old transaction to revert its balance impact
+      final oldTxResponse = await _client
+          .from('transactions')
+          .select()
+          .eq('id', transaction.id)
+          .eq('user_id', currentUserId!)
+          .single();
+
+      final oldTx = new_tx.Transaction.fromSupabase(oldTxResponse);
+
+      // Update the transaction
       await _client
           .from('transactions')
           .update({
@@ -655,6 +706,27 @@ class SupabaseDatabaseService {
           })
           .eq('id', transaction.id)
           .eq('user_id', currentUserId!);
+
+      // Update account balances
+      // Revert old transaction impact
+      if (oldTx.accountId != null) {
+        await _updateAccountBalance(
+          oldTx.accountId!,
+          oldTx.type == new_tx.TransactionType.income
+            ? -oldTx.amount  // Revert income
+            : oldTx.amount,  // Revert expense
+        );
+      }
+
+      // Apply new transaction impact
+      if (transaction.accountId != null) {
+        await _updateAccountBalance(
+          transaction.accountId!,
+          transaction.type == new_tx.TransactionType.income
+            ? transaction.amount
+            : -transaction.amount,
+        );
+      }
     } catch (e) {
       print('Error updating transaction: $e');
       rethrow;
@@ -666,11 +738,32 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
+      // Get the transaction before deleting to revert its balance impact
+      final txResponse = await _client
+          .from('transactions')
+          .select()
+          .eq('id', id)
+          .eq('user_id', currentUserId!)
+          .single();
+
+      final transaction = new_tx.Transaction.fromSupabase(txResponse);
+
+      // Delete the transaction
       await _client
           .from('transactions')
           .delete()
           .eq('id', id)
           .eq('user_id', currentUserId!);
+
+      // Revert balance impact
+      if (transaction.accountId != null) {
+        await _updateAccountBalance(
+          transaction.accountId!,
+          transaction.type == new_tx.TransactionType.income
+            ? -transaction.amount  // Revert income
+            : transaction.amount,  // Revert expense
+        );
+      }
     } catch (e) {
       print('Error deleting transaction: $e');
       rethrow;
