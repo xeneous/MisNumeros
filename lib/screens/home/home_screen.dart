@@ -2694,40 +2694,72 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final frequency = await showDialog<ExpenseFrequency>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Nuevo Gasto Fijo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Selecciona la frecuencia del gasto:'),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+        title: const Text('Tipo de Gasto Fijo'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.event_repeat, color: Colors.deepPurple),
                 ),
-                child: const Icon(Icons.calendar_today, color: Colors.blue),
+                title: const Text('Mensual'),
+                subtitle: const Text('Gastos que se repiten cada mes'),
+                onTap: () => Navigator.of(context).pop(ExpenseFrequency.monthly),
               ),
-              title: const Text('Mensual'),
-              subtitle: const Text('Se repite cada mes'),
-              onTap: () => Navigator.of(context).pop(ExpenseFrequency.monthly),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.repeat, color: Colors.blue),
                 ),
-                child: const Icon(Icons.date_range, color: Colors.green),
+                title: const Text('Semanal'),
+                subtitle: const Text('Gastos que se repiten cada semana'),
+                onTap: () => Navigator.of(context).pop(ExpenseFrequency.weekly),
               ),
-              title: const Text('Semanal'),
-              subtitle: const Text('Se repite cada semana'),
-              onTap: () => Navigator.of(context).pop(ExpenseFrequency.weekly),
-            ),
-          ],
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.calendar_month, color: Colors.teal),
+                ),
+                title: const Text('Bimestral'),
+                subtitle: const Text('Gastos que se repiten cada 2 meses'),
+                onTap: () => Navigator.of(context).pop(ExpenseFrequency.bimonthly),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.event, color: Colors.orange),
+                ),
+                title: const Text('Única vez'),
+                subtitle: const Text('Gasto que ocurre una sola vez'),
+                onTap: () => Navigator.of(context).pop(ExpenseFrequency.oneTime),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
