@@ -58,10 +58,20 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
             // Safety check for infinite values
             final amount = expense.amount.isFinite ? expense.amount : 0.0;
 
-            if (expense.frequency == ExpenseFrequency.monthly) {
-              monthlyTotal += amount;
-            } else if (expense.frequency == ExpenseFrequency.weekly) {
-              weeklyTotal += amount;
+            switch (expense.frequency) {
+              case ExpenseFrequency.monthly:
+                monthlyTotal += amount;
+                break;
+              case ExpenseFrequency.weekly:
+                weeklyTotal += amount;
+                break;
+              case ExpenseFrequency.bimonthly:
+                // Convert bimonthly to monthly equivalent (divided by 2)
+                monthlyTotal += amount / 2;
+                break;
+              case ExpenseFrequency.oneTime:
+                // One-time expenses don't count in recurring totals
+                break;
             }
           }
         }

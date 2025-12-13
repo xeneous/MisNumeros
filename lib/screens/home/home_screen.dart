@@ -13,6 +13,7 @@ import '../../models/fixed_expense.dart'; // Needed for ExpenseFrequency enum
 import '../../models/proximo_gasto.dart';
 import '../../models/account.dart';
 import '../../models/user.dart';
+import '../../models/skipped_payment.dart';
 import '../../models/transaccion.dart' as tx; // Import old Transaccion model
 import '../../models/transaction.dart'
     as new_tx; // Import NEW Transaction model
@@ -53,6 +54,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<ProximoGasto> _proximosGastos = [];
   Map<String, double> _accountBalances = {};
   Map<int, String> _gastoFijoNames = {}; // Map of gastoFijo ID to name
+  Map<int, String> _gastoFijoIds = {}; // Map of gastoFijo hash to real UUID
+  Set<String> _skippedPaymentKeys = {}; // Set of "fixedExpenseId_date" for skipped payments
   List<new_tx.Transaction> _dailyTransactions =
       []; // List for daily transactions
   final double _totalAvailableBalance = 0.0; // Sum of all account balances
@@ -185,12 +188,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       // Calculate balances and totals synchronously (no await needed)
       final balances = await _calculateBalances(accounts);
-      _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(accounts);
+
+      print('HomeScreen: Accounts purposes:');
+      for (var acc in accounts) {
+        print('  ${acc.name}: purpose=${acc.accountPurpose.name}, balance=${balances[acc.id]}');
+      }
+
+      _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(accounts, balances);
 
       print('HomeScreen: Calculated balances: $balances');
       print(
         'HomeScreen: Total balances by currency: $_totalBalancesByCurrency',
       );
+      print('HomeScreen: Active currency: $_activeCurrency');
 
       // Fetch all other data in parallel
       final today = DateTime.now();
@@ -220,12 +230,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         // Próximos gastos
         _generateProximosGastosFromFixed(currentUser.id),
+        // Skipped payments
+        dbService.getSkippedPayments(),
       ]);
 
       final dailyTransactions = results[0] as List<new_tx.Transaction>;
       final topExpenses = results[1] as List<String>;
       final topIncomes = results[2] as List<String>;
       final proximosGastos = results[3] as List<ProximoGasto>;
+      final skippedPayments = results[4] as List<dynamic>;
+
+      // Build set of skipped payment keys for quick lookup
+      final skippedKeys = <String>{};
+      for (var skip in skippedPayments) {
+        final dateStr = (skip.skippedDate as DateTime).toIso8601String().split('T')[0];
+        skippedKeys.add('${skip.fixedExpenseId}_$dateStr');
+      }
 
       print('HomeScreen: Fetched ${dailyTransactions.length} daily transactions');
       print('HomeScreen: Generated ${proximosGastos.length} próximos gastos from fixed expenses');
@@ -245,6 +265,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _dailyLimit = dailyLimit;
           _topExpenseDescriptions = topExpenses;
           _topIncomeDescriptions = topIncomes;
+          _skippedPaymentKeys = skippedKeys;
           // Set default account for quick add form if not already set, inside setState
           if (accounts.isNotEmpty) {
             _quickAddSelectedAccount =
@@ -482,7 +503,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildProximosGastosCompact() {
     // Filtrar gastos según el filtro seleccionado
     final filteredGastos = _showOnlyPending
-        ? _proximosGastos.where((g) => !g.pagado).toList()
+        ? _proximosGastos.where((g) {
+            // Exclude paid expenses
+            if (g.pagado) return false;
+
+            // Exclude skipped expenses
+            final realFixedExpenseId = _gastoFijoIds[g.idGasto];
+            if (realFixedExpenseId != null) {
+              final dateStr = g.fechaVencimiento.toIso8601String().split('T')[0];
+              final skipKey = '${realFixedExpenseId}_$dateStr';
+              if (_skippedPaymentKeys.contains(skipKey)) return false;
+            }
+
+            return true;
+          }).toList()
         : _proximosGastos;
 
     // Tomar solo los primeros 3 para el scroll
@@ -570,8 +604,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       final isOverdue = daysUntilDue < 0;
                       final isDueToday = daysUntilDue == 0;
 
+                      // Check if this payment is skipped
+                      final realFixedExpenseId = _gastoFijoIds[gasto.idGasto];
+                      final dateStr = gasto.fechaVencimiento.toIso8601String().split('T')[0];
+                      final skipKey = realFixedExpenseId != null ? '${realFixedExpenseId}_$dateStr' : '';
+                      final isSkipped = _skippedPaymentKeys.contains(skipKey);
+
                       return Opacity(
-                        opacity: gasto.pagado ? 0.5 : 1.0,
+                        opacity: (gasto.pagado || isSkipped) ? 0.5 : 1.0,
                         child: Row(
                           children: [
                             // Indicador de fecha
@@ -587,7 +627,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
-                                      decoration: gasto.pagado
+                                      color: isSkipped ? Colors.grey : null,
+                                      decoration: (gasto.pagado || isSkipped)
                                           ? TextDecoration.lineThrough
                                           : TextDecoration.none,
                                     ),
@@ -611,7 +652,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // Monto y botón de pago
+                            // Monto y botones
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
@@ -625,35 +666,90 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                InkWell(
-                                  onTap: () => _toggleGastoPagado(
-                                    _proximosGastos.indexOf(gasto),
-                                    !gasto.pagado,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    width: 24,
-                                    height: 24,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: gasto.pagado
-                                          ? const Color(0xFF6B73FF)
-                                          : Colors.transparent,
-                                      border: Border.all(
-                                        color: gasto.pagado
-                                            ? const Color(0xFF6B73FF)
-                                            : Colors.grey[400]!,
-                                        width: 2,
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Botón Saltear/Restaurar
+                                    if (!gasto.pagado) ...[
+                                      InkWell(
+                                        onTap: () => _skipPayment(gasto),
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isSkipped
+                                                ? Colors.green.withValues(alpha: 0.1)
+                                                : Colors.orange.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: isSkipped
+                                                  ? Colors.green[300]!
+                                                  : Colors.orange[300]!,
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                isSkipped ? Icons.refresh : Icons.skip_next,
+                                                color: isSkipped
+                                                    ? Colors.green[700]
+                                                    : Colors.orange[700],
+                                                size: 14,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                isSkipped ? 'Restaurar' : 'Saltear',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: isSkipped
+                                                      ? Colors.green[700]
+                                                      : Colors.orange[700],
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    // Botón marcar como pagado
+                                    InkWell(
+                                      onTap: () => _toggleGastoPagado(
+                                        _proximosGastos.indexOf(gasto),
+                                        !gasto.pagado,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Container(
+                                        width: 24,
+                                        height: 24,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: gasto.pagado
+                                              ? const Color(0xFF6B73FF)
+                                              : Colors.transparent,
+                                          border: Border.all(
+                                            color: gasto.pagado
+                                                ? const Color(0xFF6B73FF)
+                                                : Colors.grey[400]!,
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: gasto.pagado
+                                            ? const Icon(
+                                                Icons.check,
+                                                color: Colors.white,
+                                                size: 16,
+                                              )
+                                            : null,
                                       ),
                                     ),
-                                    child: gasto.pagado
-                                        ? const Icon(
-                                            Icons.check,
-                                            color: Colors.white,
-                                            size: 16,
-                                          )
-                                        : null,
-                                  ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1882,14 +1978,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Map<String, double> _calculateTotalBalancesByCurrency(
     List<Account> accounts,
+    Map<String, double> accountBalances,
   ) {
     final Map<String, double> totals = {};
     for (var acc in accounts) {
-      totals.update(
-        acc.moneda,
-        (value) => value + acc.currentBalance,
-        ifAbsent: () => acc.currentBalance,
-      );
+      // Only include accounts with purpose 'available' in the total
+      if (acc.accountPurpose == AccountPurpose.available) {
+        // Use calculated balance from accountBalances parameter
+        final balance = accountBalances[acc.id] ?? 0.0;
+        totals.update(
+          acc.moneda,
+          (value) => value + balance,
+          ifAbsent: () => balance,
+        );
+      }
     }
     return totals;
   }
@@ -2317,7 +2419,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       children: buttons.map((label) {
         return ActionChip(
           label: Text(label),
-          onPressed: () => _saveQuickTransactionWithDescription(label),
+          onPressed: _isSavingQuickTransaction
+              ? null
+              : () => _saveQuickTransactionWithDescription(label),
           backgroundColor: Colors.grey[200],
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
@@ -2329,6 +2433,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _saveQuickTransactionWithDescription(String description) async {
+    // Prevent double-clicks
+    if (_isSavingQuickTransaction) return;
+
     // Set the description from the button
     _quickAddDescriptionController.text = description;
 
@@ -2392,6 +2499,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _saveQuickTransaction() async {
     if (!_quickAddFormKey.currentState!.validate()) return;
 
+    // Prevent double-clicks
+    if (_isSavingQuickTransaction) return;
+
     print('HomeScreen: _saveQuickTransaction() called');
     setState(() => _isSavingQuickTransaction = true);
 
@@ -2410,17 +2520,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       // --- NEW MODEL IMPLEMENTATION ---
       // Create a new transaction using the Firestore-compatible model
+      final transactionType = _quickAddTransactionType ==
+              tx
+                  .TipoTransaccion
+                  .gasto // Use the old enum for comparison
+          ? new_tx.TransactionType.expense
+          : new_tx.TransactionType.income;
+
       final newTransaction = new_tx.Transaction(
         id: const Uuid().v4(),
         userId: currentUser.id, // Use the Firebase UID (String)
         accountId: _quickAddSelectedAccount!.id,
-        type:
-            _quickAddTransactionType ==
-                tx
-                    .TipoTransaccion
-                    .gasto // Use the old enum for comparison
-            ? new_tx.TransactionType.expense
-            : new_tx.TransactionType.income,
+        transactionTypeId: transactionType == new_tx.TransactionType.expense ? 2 : 1,
+        type: transactionType,
         amount: amount,
         description: _quickAddDescriptionController.text.trim().isEmpty
             ? null
@@ -2463,6 +2575,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _accountBalances = await _calculateBalances(_accounts);
           _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(
             _accounts,
+            _accountBalances,
           );
           _dailyLimit = _calculateDailyLimit(
             _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
@@ -2496,6 +2609,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _quickAddCategoryController.clear();
         _quickAddTransactionType = null; // Deselect transaction type
         _showExtraQuickAddFields = false;
+
+        // Reset account to default
+        _quickAddSelectedAccount = _accounts.where((acc) => acc.isDefault).firstOrNull ?? _accounts.firstOrNull;
+
         // The state variables for balances are already updated above
       });
 
@@ -2646,6 +2763,74 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _skipPayment(ProximoGasto gasto) async {
+    try {
+      // Get the real UUID from the map (gasto.idGasto is the hashed int)
+      final realFixedExpenseId = _gastoFijoIds[gasto.idGasto];
+      if (realFixedExpenseId == null) {
+        throw Exception('No se encontró el ID del gasto fijo');
+      }
+
+      // Check if already skipped
+      final dateStr = gasto.fechaVencimiento.toIso8601String().split('T')[0];
+      final skipKey = '${realFixedExpenseId}_$dateStr';
+
+      if (_skippedPaymentKeys.contains(skipKey)) {
+        // Already skipped - unskip it
+        await dbService.unskipPayment(
+          fixedExpenseId: realFixedExpenseId,
+          date: gasto.fechaVencimiento,
+        );
+
+        // Reload data to refresh the list
+        await _loadData();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Pago de ${_gastoFijoNames[gasto.idGasto] ?? gasto.detalle} restaurado',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // Not skipped yet - skip it
+        await dbService.skipPayment(
+          fixedExpenseId: realFixedExpenseId,
+          date: gasto.fechaVencimiento,
+          reason: 'Salteado manualmente',
+        );
+
+        // Reload data to refresh the list
+        await _loadData();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Pago de ${_gastoFijoNames[gasto.idGasto] ?? gasto.detalle} salteado',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al saltear pago: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _toggleGastoPagado(int index, bool value) async {
     if (value == true) {
       // When marking as paid, show account selection dialog
@@ -2743,6 +2928,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         id: const Uuid().v4(),
         userId: currentUser.id,
         accountId: selectedAccount.id,
+        transactionTypeId: 2, // 2 = expense
         type: new_tx.TransactionType.expense,
         amount: gasto.importe,
         description: 'Pago: $gastoName',
@@ -2794,15 +2980,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<Map<String, double>> _calculateBalances(List<Account> accounts) async {
-    final Map<String, double> balances = {};
-    for (final account in accounts) {
-      // Get the most up-to-date account data from database
-      final updatedAccount = await dbService.getAccount(account.id);
-      balances[account.id] =
-          updatedAccount?.currentBalance ?? account.currentBalance;
-      print('HomeScreen: Balance for ${account.name}: ${balances[account.id]}');
-    }
-    return balances;
+    // Fetch all balances in parallel for better performance
+    final balancesFutures = accounts.map((account) async {
+      final calculatedBalance = await dbService.getAccountBalance(account.id);
+      print('HomeScreen: Calculated balance for ${account.name}: $calculatedBalance');
+      return MapEntry(account.id, calculatedBalance);
+    }).toList();
+
+    final balanceEntries = await Future.wait(balancesFutures);
+    return Map.fromEntries(balanceEntries);
   }
 
   // Generate próximos gastos from fixed expenses
@@ -2826,9 +3012,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     for (final gastoFijo in gastosFijos) {
       if (!gastoFijo.activo) continue;
 
-      // Store the name for later use (hash String ID to int for legacy model)
+      // Store the name and ID for later use (hash String ID to int for legacy model)
       final gastoIdHash = gastoFijo.idGasto.hashCode.abs();
       gastoNames[gastoIdHash] = gastoFijo.nombre;
+      _gastoFijoIds[gastoIdHash] = gastoFijo.idGasto; // Store real UUID
 
       // Calculate next due date based on frequency
       DateTime nextDueDate = _calculateNextDueDate(gastoFijo);
@@ -2869,30 +3056,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   DateTime _calculateNextDueDate(FixedExpense gastoFijo) {
     final now = DateTime.now();
 
-    if (gastoFijo.frecuencia == 'MENSUAL') {
-      final targetDay = gastoFijo.diaMes;
-      var nextDate = DateTime(now.year, now.month, targetDay);
+    switch (gastoFijo.frecuencia) {
+      case 'MENSUAL':
+        final targetDay = gastoFijo.diaMes;
+        var nextDate = DateTime(now.year, now.month, targetDay);
 
-      // If the date has passed this month, move to next month
-      if (nextDate.isBefore(now)) {
-        nextDate = DateTime(now.year, now.month + 1, targetDay);
-      }
+        // If the date has passed this month, move to next month
+        if (nextDate.isBefore(now)) {
+          nextDate = DateTime(now.year, now.month + 1, targetDay);
+        }
 
-      return nextDate;
-    } else if (gastoFijo.frecuencia == 'SEMANAL') {
-      final targetWeekday = gastoFijo.diaSemana;
-      var nextDate = now;
+        return nextDate;
 
-      // Find next occurrence of the target weekday
-      while (nextDate.weekday != targetWeekday) {
-        nextDate = nextDate.add(const Duration(days: 1));
-      }
+      case 'SEMANAL':
+        final targetWeekday = gastoFijo.diaSemana;
+        var nextDate = now;
 
-      return nextDate;
+        // Find next occurrence of the target weekday
+        while (nextDate.weekday != targetWeekday) {
+          nextDate = nextDate.add(const Duration(days: 1));
+        }
+
+        return nextDate;
+
+      case 'BIMESTRAL':
+        final targetDay = gastoFijo.diaMes;
+        var nextDate = DateTime(now.year, now.month, targetDay);
+
+        // If the date has passed this month, move to next bimonth
+        if (nextDate.isBefore(now)) {
+          nextDate = DateTime(now.year, now.month + 2, targetDay);
+        }
+
+        return nextDate;
+
+      case 'UNICA_VEZ':
+        // For one-time expenses, return the due date
+        return gastoFijo.dueDate ?? now.add(const Duration(days: 7));
+
+      default:
+        // Default: next week
+        return now.add(const Duration(days: 7));
     }
-
-    // Default: next week
-    return now.add(const Duration(days: 7));
   }
 
   // Función para formatear valores financieros con opción de privacidad

@@ -3,6 +3,7 @@ import '../models/account.dart';
 import '../models/credit_card.dart';
 import '../models/categoria.dart';
 import '../models/fixed_expense.dart';
+import '../models/skipped_payment.dart';
 import '../models/transaction.dart' as new_tx;
 
 /// Service for managing database operations with Supabase
@@ -125,31 +126,76 @@ class SupabaseDatabaseService {
     }
   }
 
-  /// Helper method to update account balance by adding an amount (private)
-  /// Use positive amount for income, negative for expenses
-  Future<void> _updateAccountBalance(String accountId, double amountDelta) async {
+  // ============================================
+  // BALANCE CALCULATIONS (using SQL functions)
+  // ============================================
+
+  /// Get calculated balance for a specific account using SQL function
+  Future<double> getAccountBalance(String accountId) async {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
-      // Get current account
       final response = await _client
-          .from('accounts')
-          .select('current_balance')
-          .eq('id', accountId)
-          .eq('user_id', currentUserId!)
-          .single();
+          .rpc('get_account_balance', params: {'p_account_id': accountId});
 
-      final currentBalance = (response['current_balance'] as num?)?.toDouble() ?? 0.0;
-      final newBalance = currentBalance + amountDelta;
-
-      // Update balance
-      await _client
-          .from('accounts')
-          .update({'current_balance': newBalance})
-          .eq('id', accountId)
-          .eq('user_id', currentUserId!);
+      return (response as num?)?.toDouble() ?? 0.0;
     } catch (e) {
-      print('Error updating account balance: $e');
+      print('Error getting account balance: $e');
+      return 0.0;
+    }
+  }
+
+  /// Get total available balance (only accounts with purpose='available')
+  Future<double> getAvailableBalance(String? userId, [String? currency]) async {
+    final uid = userId ?? currentUserId;
+    if (uid == null) throw Exception('User not authenticated');
+
+    try {
+      final response = await _client.rpc('get_available_balance', params: {
+        'p_user_id': uid,
+        'p_currency': currency,
+      });
+
+      return (response as num?)?.toDouble() ?? 0.0;
+    } catch (e) {
+      print('Error getting available balance: $e');
+      return 0.0;
+    }
+  }
+
+  /// Get total savings balance (only accounts with purpose='savings')
+  Future<double> getSavingsBalance(String? userId, [String? currency]) async {
+    final uid = userId ?? currentUserId;
+    if (uid == null) throw Exception('User not authenticated');
+
+    try {
+      final response = await _client.rpc('get_savings_balance', params: {
+        'p_user_id': uid,
+        'p_currency': currency,
+      });
+
+      return (response as num?)?.toDouble() ?? 0.0;
+    } catch (e) {
+      print('Error getting savings balance: $e');
+      return 0.0;
+    }
+  }
+
+  /// Get accounts with calculated balances from view
+  Future<List<Account>> getAccountsWithCalculatedBalances([String? userId]) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+
+    try {
+      final response = await _client
+          .from('account_balances')
+          .select()
+          .eq('user_id', currentUserId!);
+
+      return (response as List)
+          .map((json) => Account.fromSupabase(json))
+          .toList();
+    } catch (e) {
+      print('Error getting accounts with calculated balances: $e');
       rethrow;
     }
   }
@@ -644,31 +690,24 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
-      // Insert the transaction
+      // Insert the transaction with transaction_type_id
       final response = await _client
           .from('transactions')
           .insert({
             'user_id': currentUserId!,
             'account_id': transaction.accountId,
             'category_id': transaction.category,
-            'transaction_type': transaction.type.name,
+            'transaction_type_id': transaction.transactionTypeId,
             'amount': transaction.amount,
             'description': transaction.description,
             'transaction_date': transaction.date.toIso8601String(),
             'notes': transaction.description,
+            'destination_account_id': transaction.destinationAccountId,
           })
           .select()
           .single();
 
-      // Update account balance if accountId is provided
-      if (transaction.accountId != null) {
-        await _updateAccountBalance(
-          transaction.accountId!,
-          transaction.type == new_tx.TransactionType.income
-            ? transaction.amount
-            : -transaction.amount,
-        );
-      }
+      // Balance is automatically calculated by SQL functions - no manual update needed
 
       return new_tx.Transaction.fromSupabase(response);
     } catch (e) {
@@ -682,51 +721,23 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
-      // Get the old transaction to revert its balance impact
-      final oldTxResponse = await _client
-          .from('transactions')
-          .select()
-          .eq('id', transaction.id)
-          .eq('user_id', currentUserId!)
-          .single();
-
-      final oldTx = new_tx.Transaction.fromSupabase(oldTxResponse);
-
-      // Update the transaction
+      // Update the transaction with transaction_type_id
       await _client
           .from('transactions')
           .update({
             'account_id': transaction.accountId,
             'category_id': transaction.category,
-            'transaction_type': transaction.type.name,
+            'transaction_type_id': transaction.transactionTypeId,
             'amount': transaction.amount,
             'description': transaction.description,
             'transaction_date': transaction.date.toIso8601String(),
             'notes': transaction.description,
+            'destination_account_id': transaction.destinationAccountId,
           })
           .eq('id', transaction.id)
           .eq('user_id', currentUserId!);
 
-      // Update account balances
-      // Revert old transaction impact
-      if (oldTx.accountId != null) {
-        await _updateAccountBalance(
-          oldTx.accountId!,
-          oldTx.type == new_tx.TransactionType.income
-            ? -oldTx.amount  // Revert income
-            : oldTx.amount,  // Revert expense
-        );
-      }
-
-      // Apply new transaction impact
-      if (transaction.accountId != null) {
-        await _updateAccountBalance(
-          transaction.accountId!,
-          transaction.type == new_tx.TransactionType.income
-            ? transaction.amount
-            : -transaction.amount,
-        );
-      }
+      // Balance is automatically recalculated by SQL functions - no manual update needed
     } catch (e) {
       print('Error updating transaction: $e');
       rethrow;
@@ -738,32 +749,14 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
-      // Get the transaction before deleting to revert its balance impact
-      final txResponse = await _client
-          .from('transactions')
-          .select()
-          .eq('id', id)
-          .eq('user_id', currentUserId!)
-          .single();
-
-      final transaction = new_tx.Transaction.fromSupabase(txResponse);
-
-      // Delete the transaction
+      // Simply delete the transaction
       await _client
           .from('transactions')
           .delete()
           .eq('id', id)
           .eq('user_id', currentUserId!);
 
-      // Revert balance impact
-      if (transaction.accountId != null) {
-        await _updateAccountBalance(
-          transaction.accountId!,
-          transaction.type == new_tx.TransactionType.income
-            ? -transaction.amount  // Revert income
-            : transaction.amount,  // Revert expense
-        );
-      }
+      // Balance is automatically recalculated by SQL functions - no manual update needed
     } catch (e) {
       print('Error deleting transaction: $e');
       rethrow;
@@ -804,19 +797,43 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
+      // Check if category is a valid UUID, otherwise send null
+      String? categoryId;
+      if (expense.category.isNotEmpty) {
+        // Simple UUID regex check
+        final uuidPattern = RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+          caseSensitive: false,
+        );
+        if (uuidPattern.hasMatch(expense.category)) {
+          categoryId = expense.category;
+        }
+      }
+
       final response = await _client
           .from('fixed_expenses')
           .insert({
             'user_id': currentUserId!,
             'account_id': expense.accountId,
-            'category_id': expense.category,
+            'category_id': categoryId, // null if not a valid UUID
             'name': expense.name,
             'amount': expense.amount,
             'frequency': expense.frequency.name,
             'start_date': expense.createdAt.toIso8601String().split('T')[0],
             'end_date': null,
-            'day_of_week': expense.dayOfWeek,
-            'day_of_month': expense.dayOfMonth,
+            // Only set day_of_week for weekly expenses
+            'day_of_week': expense.frequency == ExpenseFrequency.weekly
+                ? expense.dayOfWeek
+                : null,
+            // Only set day_of_month for monthly/bimonthly expenses
+            'day_of_month': (expense.frequency == ExpenseFrequency.monthly ||
+                    expense.frequency == ExpenseFrequency.bimonthly)
+                ? expense.dayOfMonth
+                : null,
+            // Only set due_date for one-time expenses
+            'due_date': expense.frequency == ExpenseFrequency.oneTime
+                ? expense.dueDate?.toIso8601String().split('T')[0]
+                : null,
             'is_active': expense.isActive,
           })
           .select()
@@ -834,18 +851,41 @@ class SupabaseDatabaseService {
     if (currentUserId == null) throw Exception('User not authenticated');
 
     try {
+      // Check if category is a valid UUID, otherwise send null
+      String? categoryId;
+      if (expense.category.isNotEmpty) {
+        final uuidPattern = RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+          caseSensitive: false,
+        );
+        if (uuidPattern.hasMatch(expense.category)) {
+          categoryId = expense.category;
+        }
+      }
+
       await _client
           .from('fixed_expenses')
           .update({
             'account_id': expense.accountId,
-            'category_id': expense.category,
+            'category_id': categoryId, // null if not a valid UUID
             'name': expense.name,
             'amount': expense.amount,
             'frequency': expense.frequency.name,
             'start_date': expense.createdAt.toIso8601String().split('T')[0],
             'end_date': null,
-            'day_of_week': expense.dayOfWeek,
-            'day_of_month': expense.dayOfMonth,
+            // Only set day_of_week for weekly expenses
+            'day_of_week': expense.frequency == ExpenseFrequency.weekly
+                ? expense.dayOfWeek
+                : null,
+            // Only set day_of_month for monthly/bimonthly expenses
+            'day_of_month': (expense.frequency == ExpenseFrequency.monthly ||
+                    expense.frequency == ExpenseFrequency.bimonthly)
+                ? expense.dayOfMonth
+                : null,
+            // Only set due_date for one-time expenses
+            'due_date': expense.frequency == ExpenseFrequency.oneTime
+                ? expense.dueDate?.toIso8601String().split('T')[0]
+                : null,
             'is_active': expense.isActive,
           })
           .eq('id', expense.id)
@@ -910,5 +950,106 @@ class SupabaseDatabaseService {
     return transactions
         .where((t) => t.type == new_tx.TransactionType.expense)
         .fold<double>(0.0, (sum, t) => sum + t.amount);
+  }
+
+  // ============================================================================
+  // SKIPPED PAYMENTS METHODS
+  // ============================================================================
+
+  /// Skip a fixed expense payment for a specific date
+  Future<SkippedPayment> skipPayment({
+    required String fixedExpenseId,
+    required DateTime date,
+    String? reason,
+  }) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+
+    try {
+      final response = await _client
+          .from('skipped_payments')
+          .insert({
+            'user_id': currentUserId!,
+            'fixed_expense_id': fixedExpenseId,
+            'skipped_date': date.toIso8601String().split('T')[0],
+            'reason': reason,
+          })
+          .select()
+          .single();
+
+      return SkippedPayment.fromSupabase(response);
+    } catch (e) {
+      print('Error skipping payment: $e');
+      rethrow;
+    }
+  }
+
+  /// Unskip a payment (remove from skipped list)
+  Future<void> unskipPayment({
+    required String fixedExpenseId,
+    required DateTime date,
+  }) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+
+    try {
+      await _client
+          .from('skipped_payments')
+          .delete()
+          .eq('fixed_expense_id', fixedExpenseId)
+          .eq('skipped_date', date.toIso8601String().split('T')[0])
+          .eq('user_id', currentUserId!);
+    } catch (e) {
+      print('Error unskipping payment: $e');
+      rethrow;
+    }
+  }
+
+  /// Check if a payment is skipped for a specific date
+  Future<bool> isPaymentSkipped({
+    required String fixedExpenseId,
+    required DateTime date,
+  }) async {
+    if (currentUserId == null) return false;
+
+    try {
+      final response = await _client
+          .from('skipped_payments')
+          .select('id')
+          .eq('fixed_expense_id', fixedExpenseId)
+          .eq('skipped_date', date.toIso8601String().split('T')[0])
+          .eq('user_id', currentUserId!)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e) {
+      print('Error checking if payment is skipped: $e');
+      return false;
+    }
+  }
+
+  /// Get all skipped payments for a fixed expense
+  Future<List<SkippedPayment>> getSkippedPayments({
+    String? fixedExpenseId,
+  }) async {
+    if (currentUserId == null) throw Exception('User not authenticated');
+
+    try {
+      dynamic query = _client
+          .from('skipped_payments')
+          .select()
+          .eq('user_id', currentUserId!);
+
+      if (fixedExpenseId != null) {
+        query = query.eq('fixed_expense_id', fixedExpenseId);
+      }
+
+      final response = await query.order('skipped_date', ascending: false);
+
+      return (response as List)
+          .map((json) => SkippedPayment.fromSupabase(json))
+          .toList();
+    } catch (e) {
+      print('Error getting skipped payments: $e');
+      rethrow;
+    }
   }
 }

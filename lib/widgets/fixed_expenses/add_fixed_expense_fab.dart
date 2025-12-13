@@ -24,40 +24,71 @@ class AddFixedExpenseFab extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Tipo de Gasto Fijo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  // Corrected withOpacity
-                  color: Colors.deepPurple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.event_repeat, color: Colors.deepPurple),
                 ),
-                child: const Icon(Icons.event_repeat, color: Colors.deepPurple),
+                title: const Text('Mensual'),
+                subtitle: const Text('Gastos que se repiten cada mes'),
+                onTap: () => _addExpense(context, ExpenseFrequency.monthly),
               ),
-              title: const Text('Mensual'),
-              subtitle: const Text('Gastos que se repiten cada mes'),
-              onTap: () => _addExpense(context, ExpenseFrequency.monthly),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.repeat, color: Colors.blue),
                 ),
-                child: const Icon(Icons.repeat, color: Colors.blue),
+                title: const Text('Semanal'),
+                subtitle: const Text('Gastos que se repiten cada semana'),
+                onTap: () => _addExpense(context, ExpenseFrequency.weekly),
               ),
-              title: const Text('Semanal'),
-              subtitle: const Text('Gastos que se repiten cada semana'),
-              onTap: () => _addExpense(context, ExpenseFrequency.weekly),
-            ),
-          ],
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.calendar_month, color: Colors.teal),
+                ),
+                title: const Text('Bimestral'),
+                subtitle: const Text('Gastos que se repiten cada 2 meses'),
+                onTap: () => _addExpense(context, ExpenseFrequency.bimonthly),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.event, color: Colors.orange),
+                ),
+                title: const Text('Única vez'),
+                subtitle: const Text('Gasto que ocurre una sola vez'),
+                onTap: () => _addExpense(context, ExpenseFrequency.oneTime),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(

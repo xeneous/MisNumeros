@@ -593,6 +593,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       final newTransaction = tx.Transaction(
         id: const Uuid().v4(),
         userId: currentUser.id, // This is the Firebase UID (String)
+        transactionTypeId: _transactionType! == tx.TransactionType.expense ? 2 : 1,
         type: _transactionType!, // Now safe to use !
         amount: amount,
         description: _descriptionController.text.trim(),

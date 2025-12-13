@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 enum ExpenseFrequency {
   weekly('Semanal'),
-  monthly('Mensual');
+  monthly('Mensual'),
+  bimonthly('Bimestral'),
+  oneTime('Única vez');
 
   const ExpenseFrequency(this.displayName);
   final String displayName;
@@ -20,6 +22,7 @@ class FixedExpense {
   final PaymentType paymentType;
   final int dayOfMonth; // Para gastos mensuales (1-31)
   final int dayOfWeek; // Para gastos semanales (1=lunes, 7=domingo)
+  final DateTime? dueDate; // Para gastos de única vez
   final String category;
 
   // Getters for compatibility with legacy code
@@ -29,7 +32,18 @@ class FixedExpense {
   String get nombre => name;
   String? get descripcion => description;
   double get montoCuotas => amount;
-  String get frecuencia => frequency == ExpenseFrequency.monthly ? 'MENSUAL' : 'SEMANAL';
+  String get frecuencia {
+    switch (frequency) {
+      case ExpenseFrequency.weekly:
+        return 'SEMANAL';
+      case ExpenseFrequency.monthly:
+        return 'MENSUAL';
+      case ExpenseFrequency.bimonthly:
+        return 'BIMESTRAL';
+      case ExpenseFrequency.oneTime:
+        return 'UNICA_VEZ';
+    }
+  }
   int get diaMes => dayOfMonth;
   int get diaSemana => dayOfWeek;
   bool get activo => isActive;
@@ -52,6 +66,7 @@ class FixedExpense {
     required this.paymentType,
     required this.dayOfMonth,
     required this.dayOfWeek,
+    this.dueDate,
     required this.category,
     this.accountId,
     this.isActive = true,
@@ -70,6 +85,7 @@ class FixedExpense {
     PaymentType? paymentType,
     int? dayOfMonth,
     int? dayOfWeek,
+    DateTime? dueDate,
     String? category,
     String? accountId,
     bool? isActive,
@@ -87,6 +103,7 @@ class FixedExpense {
       paymentType: paymentType ?? this.paymentType,
       dayOfMonth: dayOfMonth ?? this.dayOfMonth,
       dayOfWeek: dayOfWeek ?? this.dayOfWeek,
+      dueDate: dueDate ?? this.dueDate,
       category: category ?? this.category,
       accountId: accountId ?? this.accountId,
       isActive: isActive ?? this.isActive,
@@ -107,6 +124,7 @@ class FixedExpense {
       'paymentType': paymentType.name,
       'dayOfMonth': dayOfMonth,
       'dayOfWeek': dayOfWeek,
+      'dueDate': dueDate?.toIso8601String(),
       'category': category,
       'accountId': accountId,
       'isActive': isActive ? 1 : 0,
@@ -133,6 +151,7 @@ class FixedExpense {
       ),
       dayOfMonth: map['dayOfMonth']?.toInt() ?? 1,
       dayOfWeek: map['dayOfWeek']?.toInt() ?? 1,
+      dueDate: map['dueDate'] != null ? DateTime.parse(map['dueDate']) : null,
       category: map['category'] ?? 'Otros',
       accountId: map['accountId'],
       isActive: map['isActive'] == 1,
@@ -147,10 +166,19 @@ class FixedExpense {
   factory FixedExpense.fromSupabase(Map<String, dynamic> map) {
     final frequencyStr = map['frequency'] as String?;
     ExpenseFrequency frequency;
-    if (frequencyStr == 'weekly') {
-      frequency = ExpenseFrequency.weekly;
-    } else {
-      frequency = ExpenseFrequency.monthly;
+    switch (frequencyStr) {
+      case 'weekly':
+        frequency = ExpenseFrequency.weekly;
+        break;
+      case 'bimonthly':
+        frequency = ExpenseFrequency.bimonthly;
+        break;
+      case 'oneTime':
+      case 'one_time':
+        frequency = ExpenseFrequency.oneTime;
+        break;
+      default:
+        frequency = ExpenseFrequency.monthly;
     }
 
     return FixedExpense(
@@ -163,6 +191,7 @@ class FixedExpense {
       paymentType: PaymentType.onDay,
       dayOfMonth: map['day_of_month']?.toInt() ?? 1,
       dayOfWeek: map['day_of_week']?.toInt() ?? 1,
+      dueDate: map['due_date'] != null ? DateTime.parse(map['due_date']) : null,
       category: map['category_id'] ?? 'Otros',
       accountId: map['account_id'],
       isActive: map['is_active'] ?? true,

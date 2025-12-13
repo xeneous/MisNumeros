@@ -1,3 +1,5 @@
+import 'transaction_type.dart' as tx_type;
+
 enum TransactionType {
   income('Ingreso'),
   expense('Egreso');
@@ -18,7 +20,13 @@ enum TransactionStatus {
 class Transaction {
   final String id;
   final String userId;
+
+  // New field: transaction_type_id (replaces type string)
+  final int transactionTypeId;
+
+  // Legacy field for backward compatibility
   final TransactionType type;
+
   final double amount;
   final String? description;
   final String? category;
@@ -31,6 +39,7 @@ class Transaction {
   // Source/Destination
   final String? accountId; // For cash/debit accounts
   final String? creditCardId; // For credit card transactions
+  final String? destinationAccountId; // For transfers
 
   // Credit card specific fields
   final int? installments; // Number of installments (cuotas)
@@ -53,6 +62,7 @@ class Transaction {
   Transaction({
     required this.id,
     required this.userId,
+    required this.transactionTypeId,
     required this.type,
     required this.amount,
     this.description,
@@ -61,6 +71,7 @@ class Transaction {
     this.status = TransactionStatus.completed,
     this.accountId,
     this.creditCardId,
+    this.destinationAccountId,
     this.installments,
     this.totalAmount,
     this.interestAmount,
@@ -77,6 +88,7 @@ class Transaction {
   Transaction copyWith({
     String? id,
     String? userId,
+    int? transactionTypeId,
     TransactionType? type,
     double? amount,
     String? description,
@@ -85,6 +97,7 @@ class Transaction {
     TransactionStatus? status,
     String? accountId,
     String? creditCardId,
+    String? destinationAccountId,
     int? installments,
     double? totalAmount,
     double? interestAmount,
@@ -100,6 +113,7 @@ class Transaction {
     return Transaction(
       id: id ?? this.id,
       userId: userId ?? this.userId,
+      transactionTypeId: transactionTypeId ?? this.transactionTypeId,
       type: type ?? this.type,
       amount: amount ?? this.amount,
       description: description ?? this.description,
@@ -108,6 +122,7 @@ class Transaction {
       status: status ?? this.status,
       accountId: accountId ?? this.accountId,
       creditCardId: creditCardId ?? this.creditCardId,
+      destinationAccountId: destinationAccountId ?? this.destinationAccountId,
       installments: installments ?? this.installments,
       totalAmount: totalAmount ?? this.totalAmount,
       interestAmount: interestAmount ?? this.interestAmount,
@@ -153,9 +168,12 @@ class Transaction {
   }
 
   factory Transaction.fromMap(Map<String, dynamic> map) {
+    final transactionTypeId = map['transactionTypeId'] as int? ?? 2;
+
     return Transaction(
       id: map['id'],
       userId: map['userId'],
+      transactionTypeId: transactionTypeId,
       type: TransactionType.values.firstWhere(
         (e) => e.name == map['type'],
         orElse: () => TransactionType.expense,
@@ -170,6 +188,7 @@ class Transaction {
       ),
       accountId: map['accountId'],
       creditCardId: map['creditCardId'],
+      destinationAccountId: map['destinationAccountId'],
       installments: map['installments']?.toInt(),
       totalAmount: map['totalAmount']?.toDouble(),
       interestAmount: map['interestAmount']?.toDouble(),
@@ -195,17 +214,31 @@ class Transaction {
   }
 
   factory Transaction.fromSupabase(Map<String, dynamic> map) {
+    // Read transaction_type_id from database
+    final transactionTypeId = map['transaction_type_id'] as int? ?? 2; // Default to expense
+
+    // For backward compatibility: also support old transaction_type string field
     final typeStr = map['transaction_type'] as String?;
+
+    // Determine legacy TransactionType enum based on transactionTypeId
     TransactionType type;
-    if (typeStr == 'income') {
+    if (transactionTypeId % 2 == 1) {
       type = TransactionType.income;
     } else {
+      type = TransactionType.expense;
+    }
+
+    // Override with string if provided (backward compatibility)
+    if (typeStr == 'income') {
+      type = TransactionType.income;
+    } else if (typeStr == 'expense') {
       type = TransactionType.expense;
     }
 
     return Transaction(
       id: map['id'],
       userId: map['user_id'],
+      transactionTypeId: transactionTypeId,
       type: type,
       amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
       description: map['description'],
@@ -214,6 +247,7 @@ class Transaction {
       status: TransactionStatus.completed,
       accountId: map['account_id'],
       creditCardId: null,
+      destinationAccountId: map['destination_account_id'],
       installments: null,
       totalAmount: null,
       interestAmount: null,

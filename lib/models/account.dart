@@ -25,6 +25,26 @@ enum AccountType {
   }
 }
 
+enum AccountPurpose {
+  available('Disponible', 'Cuenta de liquidez inmediata'),
+  savings('Ahorro', 'Cuenta de ahorro o reserva');
+
+  const AccountPurpose(this.displayName, this.description);
+  final String displayName;
+  final String description;
+
+  factory AccountPurpose.fromName(String name) {
+    switch (name) {
+      case 'available':
+        return AccountPurpose.available;
+      case 'savings':
+        return AccountPurpose.savings;
+      default:
+        return AccountPurpose.available; // Default value
+    }
+  }
+}
+
 class Account extends Equatable {
   final String id;
   final String userId;
@@ -32,6 +52,7 @@ class Account extends Equatable {
   final String? alias;
   final AccountType type;
   final String moneda;
+  final AccountPurpose accountPurpose;
 
   String get currency => moneda;
   final double initialBalance;
@@ -48,6 +69,7 @@ class Account extends Equatable {
     this.alias,
     required this.type,
     this.moneda = 'ARS',
+    this.accountPurpose = AccountPurpose.available,
     required this.initialBalance,
     required this.currentBalance,
     this.isDefault = false,
@@ -81,6 +103,7 @@ class Account extends Equatable {
     String? alias,
     AccountType? type,
     String? moneda,
+    AccountPurpose? accountPurpose,
     double? initialBalance,
     double? currentBalance,
     bool? isDefault,
@@ -95,6 +118,7 @@ class Account extends Equatable {
       alias: alias ?? this.alias,
       type: type ?? this.type,
       moneda: moneda ?? this.moneda,
+      accountPurpose: accountPurpose ?? this.accountPurpose,
       initialBalance: initialBalance ?? this.initialBalance,
       currentBalance: currentBalance ?? this.currentBalance,
       isDefault: isDefault ?? this.isDefault,
@@ -112,6 +136,7 @@ class Account extends Equatable {
       'alias': alias,
       'type': type.name,
       'moneda': moneda,
+      'accountPurpose': accountPurpose.name,
       'initialBalance': initialBalance,
       'currentBalance': currentBalance,
       'isDefault': isDefault ? 1 : 0,
@@ -132,6 +157,10 @@ class Account extends Equatable {
         orElse: () => AccountType.cash,
       ),
       moneda: map['moneda'] ?? 'ARS',
+      accountPurpose: AccountPurpose.values.firstWhere(
+        (e) => e.name == map['accountPurpose'],
+        orElse: () => AccountPurpose.available,
+      ),
       initialBalance: map['initialBalance']?.toDouble() ?? 0.0,
       currentBalance: map['currentBalance']?.toDouble() ?? 0.0,
       isDefault: map['isDefault'] == 1,
@@ -149,6 +178,7 @@ class Account extends Equatable {
       alias: map['alias'],
       type: AccountType.fromName(map['account_type']),
       moneda: map['currency'] ?? 'ARS',
+      accountPurpose: AccountPurpose.fromName(map['account_purpose'] ?? 'available'),
       initialBalance: (map['initial_balance'] as num?)?.toDouble() ?? 0.0,
       currentBalance: (map['current_balance'] as num?)?.toDouble() ?? 0.0,
       isDefault: map['is_default'] ?? false,

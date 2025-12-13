@@ -35,6 +35,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
   bool _isLoading = false;
   double _annualCostPreview = 0.0;
   String? _selectedAccountId;
+  DateTime? _selectedDueDate; // For one-time expenses
 
   final List<String> _categories = [
     'Deporte',
@@ -62,12 +63,17 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
       _selectedCategory = widget.expense!.category;
       _selectedPaymentType = widget.expense!.paymentType;
       _selectedAccountId = widget.expense!.accountId;
+      _selectedDueDate = widget.expense!.dueDate;
     } else {
       // Adding new expense - set default day
-      if (widget.frequency == ExpenseFrequency.monthly) {
+      if (widget.frequency == ExpenseFrequency.monthly ||
+          widget.frequency == ExpenseFrequency.bimonthly) {
         _dayOfMonthController.text = '15';
-      } else {
+      } else if (widget.frequency == ExpenseFrequency.weekly) {
         _dayOfWeekController.text = '1'; // Lunes
+      } else if (widget.frequency == ExpenseFrequency.oneTime) {
+        // Set default due date to tomorrow
+        _selectedDueDate = DateTime.now().add(const Duration(days: 1));
       }
     }
 
@@ -110,22 +116,14 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          // Corrected withOpacity
-                          color: widget.frequency == ExpenseFrequency.monthly
-                              ? Colors.deepPurple.withOpacity(0.1)
-                              : Colors.blue.withOpacity(0.1),
+                          color: _getFrequencyColor().withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
                             Icon(
-                              widget.frequency == ExpenseFrequency.monthly
-                                  ? Icons.event_repeat
-                                  : Icons.repeat,
-                              color:
-                                  widget.frequency == ExpenseFrequency.monthly
-                                  ? Colors.deepPurple
-                                  : Colors.blue,
+                              _getFrequencyIcon(),
+                              color: _getFrequencyColor(),
                               size: 32,
                             ),
                             const SizedBox(width: 16),
@@ -134,23 +132,15 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    widget.frequency == ExpenseFrequency.monthly
-                                        ? 'Mensual'
-                                        : 'Semanal',
+                                    _getFrequencyTitle(),
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
-                                      color:
-                                          widget.frequency ==
-                                              ExpenseFrequency.monthly
-                                          ? Colors.deepPurple
-                                          : Colors.blue,
+                                      color: _getFrequencyColor(),
                                     ),
                                   ),
                                   Text(
-                                    widget.frequency == ExpenseFrequency.monthly
-                                        ? 'Se repite cada mes'
-                                        : 'Se repite cada semana',
+                                    _getFrequencySubtitle(),
                                     style: TextStyle(
                                       fontSize: 14,
                                       color: Colors.grey[600],
@@ -302,7 +292,8 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                       const SizedBox(height: 16),
 
                       // Day configuration
-                      if (widget.frequency == ExpenseFrequency.monthly) ...[
+                      if (widget.frequency == ExpenseFrequency.monthly ||
+                          widget.frequency == ExpenseFrequency.bimonthly) ...[
                         TextFormField(
                           controller: _dayOfMonthController,
                           decoration: InputDecoration(
@@ -325,7 +316,7 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                             return null;
                           },
                         ),
-                      ] else ...[
+                      ] else if (widget.frequency == ExpenseFrequency.weekly) ...[
                         DropdownButtonFormField<String>(
                           initialValue: _getDayOfWeekName(
                             int.parse(_dayOfWeekController.text),
@@ -359,6 +350,61 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
                               ).toString();
                             });
                           },
+                        ),
+                      ] else if (widget.frequency == ExpenseFrequency.oneTime) ...[
+                        // Date picker for one-time expenses
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedDueDate ?? DateTime.now(),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _selectedDueDate = picked;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.event, color: Colors.orange),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Fecha de vencimiento',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _selectedDueDate != null
+                                            ? '${_selectedDueDate!.day}/${_selectedDueDate!.month}/${_selectedDueDate!.year}'
+                                            : 'Seleccionar fecha',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(Icons.arrow_forward_ios, size: 16),
+                              ],
+                            ),
+                          ),
                         ),
                       ],
                       const SizedBox(height: 16),
@@ -549,12 +595,16 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
           amount: amount,
           frequency: widget.frequency,
           paymentType: _selectedPaymentType,
-          dayOfMonth: widget.frequency == ExpenseFrequency.monthly
+          dayOfMonth: (widget.frequency == ExpenseFrequency.monthly ||
+                  widget.frequency == ExpenseFrequency.bimonthly)
               ? int.parse(_dayOfMonthController.text)
-              : 1,
+              : 0,
           dayOfWeek: widget.frequency == ExpenseFrequency.weekly
               ? int.parse(_dayOfWeekController.text)
-              : 1,
+              : 0,
+          dueDate: widget.frequency == ExpenseFrequency.oneTime
+              ? _selectedDueDate
+              : null,
           category: _selectedCategory,
           accountId: _selectedAccountId,
           updatedAt: DateTime.now(),
@@ -573,12 +623,16 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
           amount: amount,
           frequency: widget.frequency,
           paymentType: _selectedPaymentType,
-          dayOfMonth: widget.frequency == ExpenseFrequency.monthly
+          dayOfMonth: (widget.frequency == ExpenseFrequency.monthly ||
+                  widget.frequency == ExpenseFrequency.bimonthly)
               ? int.parse(_dayOfMonthController.text)
-              : 1,
+              : 0,
           dayOfWeek: widget.frequency == ExpenseFrequency.weekly
               ? int.parse(_dayOfWeekController.text)
-              : 1,
+              : 0,
+          dueDate: widget.frequency == ExpenseFrequency.oneTime
+              ? _selectedDueDate
+              : null,
           category: _selectedCategory,
           accountId: _selectedAccountId,
           createdAt: DateTime.now(),
@@ -590,16 +644,16 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
 
       if (mounted) {
         Navigator.of(context).pop(true); // Return true to signal success
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.expense != null
-                  ? 'Gasto fijo actualizado correctamente'
-                  : 'Gasto fijo creado correctamente',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   SnackBar(
+        //     content: Text(
+        //       widget.expense != null
+        //           ? 'Gasto fijo actualizado correctamente'
+        //           : 'Gasto fijo creado correctamente',
+        //     ),
+        //     backgroundColor: Colors.green,
+        //   ),
+        // );
       }
     } catch (e) {
       if (mounted) {
@@ -651,9 +705,20 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
     if (amountText.isNotEmpty) {
       final amount = double.tryParse(amountText);
       if (amount != null && amount > 0) {
-        newPreview = widget.frequency == ExpenseFrequency.monthly
-            ? amount * 12
-            : amount * 52;
+        switch (widget.frequency) {
+          case ExpenseFrequency.monthly:
+            newPreview = amount * 12;
+            break;
+          case ExpenseFrequency.weekly:
+            newPreview = amount * 52;
+            break;
+          case ExpenseFrequency.bimonthly:
+            newPreview = amount * 6;
+            break;
+          case ExpenseFrequency.oneTime:
+            newPreview = amount;
+            break;
+        }
       }
     }
 
@@ -662,6 +727,59 @@ class _AddEditFixedExpenseScreenState extends State<AddEditFixedExpenseScreen> {
       setState(() {
         _annualCostPreview = newPreview;
       });
+    }
+  }
+
+  // Helper methods for frequency UI
+  Color _getFrequencyColor() {
+    switch (widget.frequency) {
+      case ExpenseFrequency.monthly:
+        return Colors.deepPurple;
+      case ExpenseFrequency.weekly:
+        return Colors.blue;
+      case ExpenseFrequency.bimonthly:
+        return Colors.teal;
+      case ExpenseFrequency.oneTime:
+        return Colors.orange;
+    }
+  }
+
+  IconData _getFrequencyIcon() {
+    switch (widget.frequency) {
+      case ExpenseFrequency.monthly:
+        return Icons.event_repeat;
+      case ExpenseFrequency.weekly:
+        return Icons.repeat;
+      case ExpenseFrequency.bimonthly:
+        return Icons.calendar_month;
+      case ExpenseFrequency.oneTime:
+        return Icons.event;
+    }
+  }
+
+  String _getFrequencyTitle() {
+    switch (widget.frequency) {
+      case ExpenseFrequency.monthly:
+        return 'Mensual';
+      case ExpenseFrequency.weekly:
+        return 'Semanal';
+      case ExpenseFrequency.bimonthly:
+        return 'Bimestral';
+      case ExpenseFrequency.oneTime:
+        return 'Única vez';
+    }
+  }
+
+  String _getFrequencySubtitle() {
+    switch (widget.frequency) {
+      case ExpenseFrequency.monthly:
+        return 'Se repite cada mes';
+      case ExpenseFrequency.weekly:
+        return 'Se repite cada semana';
+      case ExpenseFrequency.bimonthly:
+        return 'Se repite cada 2 meses';
+      case ExpenseFrequency.oneTime:
+        return 'Gasto que ocurre una sola vez';
     }
   }
 }

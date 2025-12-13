@@ -190,16 +190,16 @@ class FixedExpenseListItem extends StatelessWidget {
                       await dbService.updateFixedExpense(updatedExpense);
 
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              value
-                                  ? '${expense.nombre} activado'
-                                  : '${expense.nombre} desactivado',
-                            ),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
+                        // ScaffoldMessenger.of(context).showSnackBar(
+                        //   SnackBar(
+                        //     content: Text(
+                        //       value
+                        //           ? '${expense.nombre} activado'
+                        //           : '${expense.nombre} desactivado',
+                        //     ),
+                        //     backgroundColor: Colors.green,
+                        //   ),
+                        // );
                         onExpenseUpdated();
                       }
                     } catch (e) {

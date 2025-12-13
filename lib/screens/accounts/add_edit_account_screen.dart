@@ -29,6 +29,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
   bool _isLoading = false;
   bool _isDefault = false;
   String _selectedCurrency = 'ARS';
+  AccountPurpose _selectedAccountPurpose = AccountPurpose.available;
 
   @override
   void initState() {
@@ -39,6 +40,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
       _aliasController.text = widget.account!.alias ?? '';
       _isDefault = widget.account!.isDefault;
       _selectedCurrency = widget.account!.moneda;
+      _selectedAccountPurpose = widget.account!.accountPurpose;
     } else {
       _isDefault = false;
     }
@@ -168,6 +170,51 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  // Account Purpose field
+                  DropdownButtonFormField<AccountPurpose>(
+                    value: _selectedAccountPurpose,
+                    items: AccountPurpose.values.map((AccountPurpose purpose) {
+                      return DropdownMenuItem<AccountPurpose>(
+                        value: purpose,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              purpose.displayName,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              purpose.description,
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (AccountPurpose? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedAccountPurpose = newValue;
+                        });
+                      }
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'Propósito de la cuenta',
+                      helperText: 'Disponible: se cuenta en el total. Ahorro: no se cuenta.',
+                      helperMaxLines: 2,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: Icon(
+                        _selectedAccountPurpose == AccountPurpose.available
+                            ? Icons.account_balance_wallet
+                            : Icons.savings,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   // Default account toggle
                   Container(
                     decoration: BoxDecoration(
@@ -258,6 +305,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
               ? null
               : _aliasController.text.trim(),
           moneda: _selectedCurrency,
+          accountPurpose: _selectedAccountPurpose,
           initialBalance: balance,
           currentBalance: balance, // For now, current balance = initial balance
           isDefault: _isDefault,
@@ -286,6 +334,7 @@ class _AddEditAccountScreenState extends State<AddEditAccountScreen> {
               ? null
               : _aliasController.text.trim(),
           moneda: _selectedCurrency,
+          accountPurpose: _selectedAccountPurpose,
           type: widget.accountType,
           initialBalance: balance,
           currentBalance: balance,
