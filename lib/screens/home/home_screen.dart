@@ -65,6 +65,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _displayMode = 'local'; // 'local', 'travel', 'all'
   String _activeCurrency = 'ARS'; // The primary currency for the current mode
   Map<String, double> _totalBalancesByCurrency = {};
+  Map<String, double> _reserveBalancesByCurrency = {};
+  Map<String, double> _projectedEndOfMonthByCurrency = {};
 
   // State for quick transaction form
   final _quickAddFormKey = GlobalKey<FormState>();
@@ -195,10 +197,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
 
       _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(accounts, balances);
+      _reserveBalancesByCurrency = _calculateReserveBalancesByCurrency(accounts, balances);
 
       print('HomeScreen: Calculated balances: $balances');
       print(
         'HomeScreen: Total balances by currency: $_totalBalancesByCurrency',
+      );
+      print(
+        'HomeScreen: Reserve balances by currency: $_reserveBalancesByCurrency',
       );
       print('HomeScreen: Active currency: $_activeCurrency');
 
@@ -266,6 +272,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _topExpenseDescriptions = topExpenses;
           _topIncomeDescriptions = topIncomes;
           _skippedPaymentKeys = skippedKeys;
+
+          // Calculate projected end of month after we have all the data
+          _projectedEndOfMonthByCurrency = _calculateProjectedEndOfMonth();
+
+          print('HomeScreen: Projected end of month: $_projectedEndOfMonthByCurrency');
+
           // Set default account for quick add form if not already set, inside setState
           if (accounts.isNotEmpty) {
             _quickAddSelectedAccount =
@@ -403,6 +415,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
 
+          const SizedBox(height: 12),
+
+          // Total Proyectado a Fin de Mes
+          _buildTitledAmountBox(
+            title: 'Proyectado Fin de Mes',
+            balances: _projectedEndOfMonthByCurrency,
+            color: _projectedEndOfMonthByCurrency[_activeCurrency] != null &&
+                    _projectedEndOfMonthByCurrency[_activeCurrency]! < 0
+                ? Colors.red[700]!
+                : Colors.green[700]!,
+            showTrendIcon: true,
+          ),
+
           const SizedBox(height: 16),
 
           // Cuentas/Billeteras - carrusel
@@ -429,8 +454,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Map<String, double>? balances,
     double? amount,
     required Color color,
+    bool showTrendIcon = false,
   }) {
     final isDisponible = title == 'Disponible';
+    final isProyectado = title == 'Proyectado Fin de Mes';
+
+    // Determine trend icon for projected balance
+    IconData? trendIcon;
+    if (showTrendIcon && isProyectado) {
+      final projectedValue = balances?[_activeCurrency] ?? amount ?? 0.0;
+      trendIcon = projectedValue >= 0 ? Icons.trending_up : Icons.trending_down;
+    }
 
     return InkWell(
       onTap: isDisponible ? _showAccountBreakdown : null,
@@ -449,18 +483,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             child: Center(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(
-                  _showFinancialValues
-                      ? (balances != null
-                            ? _formatMultiCurrency(balances)
-                            : _formatFinancialValue(amount ?? 0.0))
-                      : '● ● ● ● ●',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                  textAlign: TextAlign.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (trendIcon != null) ...[
+                      Icon(
+                        trendIcon,
+                        size: 20,
+                        color: color,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      _showFinancialValues
+                          ? (balances != null
+                                ? _formatMultiCurrency(balances)
+                                : _formatFinancialValue(amount ?? 0.0))
+                          : '● ● ● ● ●',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1994,6 +2041,75 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     }
     return totals;
+  }
+
+  Map<String, double> _calculateReserveBalancesByCurrency(
+    List<Account> accounts,
+    Map<String, double> accountBalances,
+  ) {
+    final Map<String, double> totals = {};
+    for (var acc in accounts) {
+      // Only include accounts with purpose 'savings' in the reserve total
+      if (acc.accountPurpose == AccountPurpose.savings) {
+        final balance = accountBalances[acc.id] ?? 0.0;
+        totals.update(
+          acc.moneda,
+          (value) => value + balance,
+          ifAbsent: () => balance,
+        );
+      }
+    }
+    return totals;
+  }
+
+  Map<String, double> _calculateProjectedEndOfMonth() {
+    final Map<String, double> projected = {};
+
+    // Start with available + reserve
+    _totalBalancesByCurrency.forEach((currency, availableBalance) {
+      projected[currency] = availableBalance;
+    });
+
+    _reserveBalancesByCurrency.forEach((currency, reserveBalance) {
+      projected.update(
+        currency,
+        (value) => value + reserveBalance,
+        ifAbsent: () => reserveBalance,
+      );
+    });
+
+    // Subtract pending fixed expenses until end of month
+    final now = DateTime.now();
+    final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+    for (var gasto in _proximosGastos) {
+      // Only subtract if:
+      // 1. Not already paid
+      // 2. Not skipped
+      // 3. Due date is before end of month
+      if (gasto.pagado) continue;
+
+      final realFixedExpenseId = _gastoFijoIds[gasto.idGasto];
+      if (realFixedExpenseId != null) {
+        final dateStr = gasto.fechaVencimiento.toIso8601String().split('T')[0];
+        final skipKey = '${realFixedExpenseId}_$dateStr';
+        if (_skippedPaymentKeys.contains(skipKey)) continue;
+      }
+
+      if (gasto.fechaVencimiento.isAfter(endOfMonth)) continue;
+
+      // Determine currency - assume ARS for local mode, USD for travel mode
+      // This is a simplification - ideally we'd get currency from the account
+      final currency = _activeCurrency;
+
+      projected.update(
+        currency,
+        (value) => value - gasto.montoEstimado,
+        ifAbsent: () => -gasto.montoEstimado,
+      );
+    }
+
+    return projected;
   }
 
   Widget _buildQuickTransactionForm() {
