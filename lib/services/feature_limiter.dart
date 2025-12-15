@@ -136,7 +136,6 @@ class FeatureLimiter {
   // Enable limitations when ready
   static void enableLimitations() {
     // This would be called when you want to start enforcing limits
-    print('Feature limitations enabled');
   }
 
   // Check current limitation status

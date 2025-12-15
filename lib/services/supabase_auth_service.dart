@@ -32,7 +32,6 @@ class SupabaseAuthService {
       }
       return null;
     } catch (e) {
-      print('Sign in error: $e');
       rethrow;
     }
   }
@@ -52,7 +51,6 @@ class SupabaseAuthService {
       if (response.user != null) {
         // Note: User profile in public.users is created automatically by trigger
         // We need to update the alias since the trigger only sets email
-        print('User registered successfully: ${response.user!.id}');
         
         // Wait a moment for the trigger to complete
         await Future.delayed(const Duration(milliseconds: 500));
@@ -80,7 +78,6 @@ class SupabaseAuthService {
       }
       return null;
     } catch (e) {
-      print('Registration error: $e');
       rethrow;
     }
   }
@@ -89,7 +86,6 @@ class SupabaseAuthService {
   /// Uses the access token instead of ID token to avoid audience validation
   Future<app_user.User?> signInWithGoogle() async {
     try {
-      print('Supabase: Starting native Google Sign-In...');
 
       // Configure Google Sign-In with Web Client ID
       final GoogleSignIn googleSignIn = GoogleSignIn(
@@ -101,11 +97,9 @@ class SupabaseAuthService {
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) {
-        print('Supabase: Google Sign-In cancelled by user');
         return null;
       }
 
-      print('Supabase: Google user selected: ${googleUser.email}');
 
       // Get authentication tokens
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -116,7 +110,6 @@ class SupabaseAuthService {
         throw Exception('No tokens from Google Sign-In');
       }
 
-      print('Supabase: Got tokens, authenticating with Supabase...');
 
       // Try signInWithIdToken WITHOUT the nonce parameter
       // The key is to not pass nonce at all, not to pass it as empty
@@ -127,17 +120,14 @@ class SupabaseAuthService {
         // Do NOT include nonce parameter at all
       );
 
-      print('Supabase: Authentication response received');
 
       if (response.user != null) {
-        print('Supabase: User authenticated: ${response.user!.id}');
 
         // Get or create user in public.users table
         final appUser = await getUserFromSupabase(response.user!.id);
 
         if (appUser == null) {
           // Create user if doesn't exist
-          print('Supabase: Creating new user profile...');
           await _client.from('users').insert({
             'id': response.user!.id,
             'email': response.user!.email ?? googleUser.email,
@@ -152,10 +142,8 @@ class SupabaseAuthService {
         return appUser;
       }
 
-      print('Supabase: No user in response');
       return null;
     } catch (e) {
-      print('Supabase Google sign in error: $e');
       rethrow;
     }
   }
@@ -165,7 +153,6 @@ class SupabaseAuthService {
     try {
       await _client.auth.signOut();
     } catch (e) {
-      print('Sign out error: $e');
       rethrow;
     }
   }
@@ -176,7 +163,6 @@ class SupabaseAuthService {
       await _client.auth.resetPasswordForEmail(email);
       return true;
     } catch (e) {
-      print('Password reset error: $e');
       return false;
     }
   }
@@ -184,14 +170,12 @@ class SupabaseAuthService {
   /// Get user from Supabase public.users table
   Future<app_user.User?> getUserFromSupabase(String userId) async {
     try {
-      print('Fetching user from Supabase: $userId');
       final response = await _client
           .from('users')
           .select()
           .eq('id', userId)
           .single();
 
-      print('User data received: $response');
       return app_user.User(
         id: response['id'],
         email: response['email'],
@@ -205,16 +189,12 @@ class SupabaseAuthService {
         updatedAt: DateTime.parse(response['updated_at']),
       );
     } catch (e) {
-      print('❌ Error getting user from Supabase: $e');
-      print('Error type: ${e.runtimeType}');
       
       // Check for specific PostgreSQL/RLS errors
       final errorString = e.toString().toLowerCase();
       if (errorString.contains('requested path is invalid') || 
           errorString.contains('row level security') ||
           errorString.contains('permission denied')) {
-        print('⚠️  RLS Error detected: La tabla users no tiene las políticas de seguridad configuradas.');
-        print('⚠️  Por favor ejecuta el script supabase_setup.sql en tu proyecto de Supabase.');
         throw Exception(
           'Error de configuración de base de datos. '
           'Por favor contacta al administrador o ejecuta el script de configuración.'
@@ -223,7 +203,6 @@ class SupabaseAuthService {
       
       // If user doesn't exist yet (e.g., just registered), wait and retry
       if (errorString.contains('not found') || errorString.contains('no rows')) {
-        print('⚠️  User not found in public.users, waiting for trigger...');
         await Future.delayed(const Duration(seconds: 1));
         
         try {
@@ -246,7 +225,6 @@ class SupabaseAuthService {
             updatedAt: DateTime.parse(retryResponse['updated_at']),
           );
         } catch (retryError) {
-          print('❌ Retry failed: $retryError');
         }
       }
       
@@ -265,7 +243,6 @@ class SupabaseAuthService {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', user.id);
     } catch (e) {
-      print('Error updating user profile: $e');
       rethrow;
     }
   }

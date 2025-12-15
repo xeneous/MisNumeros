@@ -9,7 +9,11 @@
       "Bash(git checkout:*)",
       "Bash(git push:*)",
       "Bash(flutter run)",
-      "Bash(flutter run:*)"
+      "Bash(flutter run:*)",
+      "Bash(python:*)",
+      "Bash(dart run:*)",
+      "Bash(flutter doctor:*)",
+      "Bash(findstr:*)"
     ],
     "deny": [],
     "ask": []

@@ -28,7 +28,6 @@ class UserPlanService {
         );
       }
     } catch (e) {
-      print('Firestore not available for plan check: $e');
     }
 
     // Fallback to local storage
@@ -67,7 +66,6 @@ class UserPlanService {
           })
           .timeout(const Duration(seconds: 3));
     } catch (e) {
-      print('Could not update plan in Firestore: $e');
       // Continue silently - local storage is updated
     }
   }

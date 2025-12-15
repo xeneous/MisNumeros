@@ -76,7 +76,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               selectedForegroundColor: Colors.deepPurple,
             ),
           ),
-          /* // Inicio del bloque comentado para pausar la integración con Mercado Pago
           const Divider(height: 32),
           const Text(
             'Integraciones',
@@ -88,20 +87,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           ListTile(
-            leading: Image.asset(
-              'assets/images/mp_logo.png', // Asegúrate de tener este logo en tu carpeta de assets
-              width: 24,
-              height: 24,
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.account_balance_wallet,
+                color: Colors.blue[700],
+                size: 24,
+              ),
             ),
-            title: const Text('Conectar con Mercado Pago'),
-            subtitle: const Text('Sincroniza tus gastos automáticamente'),
+            title: const Text('Mercado Pago'),
+            subtitle: const Text('Sincroniza tus pagos automáticamente'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () => Navigator.of(context).pushNamed('/mercado-pago-auth'),
+            onTap: () => Navigator.of(context).pushNamed('/mercado-pago-settings'),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-          ),*/
-          // Fin del bloque comentado
+          ),
           const Divider(height: 32),
           const Text(
             'Cuenta',

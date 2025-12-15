@@ -9,7 +9,6 @@ class AuthService {
   final firebase_auth.FirebaseAuth _auth = firebase_auth.FirebaseAuth.instance;
 
   AuthService() {
-    print('AuthService initialized - Firebase mode');
   }
 
   // Stream to listen to authentication state changes
@@ -67,7 +66,6 @@ class AuthService {
 
   // Sign in with Google
   Future<firebase_auth.User?> signInWithGoogle() async {
-    print('Google Sign-In attempted');
     try {
       // Configure Google Sign-In with the Android OAuth Client ID
       final GoogleSignIn googleSignIn = GoogleSignIn(
@@ -87,7 +85,6 @@ class AuthService {
       final userCredential = await _auth.signInWithCredential(credential);
       return userCredential.user;
     } catch (e) {
-      print('Google Sign-In error: $e');
       rethrow;
     }
   }
@@ -97,7 +94,6 @@ class AuthService {
     String email,
     String password,
   ) async {
-    print('Sign in attempt: $email / $password');
     try {
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
@@ -105,7 +101,6 @@ class AuthService {
       );
       return userCredential.user;
     } catch (e) {
-      print('Login failed: $e');
       rethrow;
     }
   }
@@ -116,7 +111,6 @@ class AuthService {
     String password,
     String alias,
   ) async {
-    print('Register attempt: $email / $password / $alias');
     try {
       await _auth.createUserWithEmailAndPassword(
         password: password,
@@ -126,7 +120,6 @@ class AuthService {
       await _auth.currentUser?.updateDisplayName(alias);
       return _auth.currentUser;
     } catch (e) {
-      print('Registration failed: $e');
       rethrow;
     }
   }
@@ -134,17 +127,14 @@ class AuthService {
   // Sign out
   Future<void> signOut() async {
     await _auth.signOut();
-    print('User signed out');
   }
 
   // Reset password
   Future<bool> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
-      print('Password reset requested for: $email');
       return true;
     } catch (e) {
-      print('Password reset failed: $e');
       return false;
     }
   }
@@ -165,7 +155,6 @@ class AuthService {
       );
       return oldUser?.idUsuario;
     } catch (e) {
-      print('Error al obtener id_usuario local: $e');
       return null;
     }
   }

@@ -60,10 +60,17 @@ dependencies:
   equatable: ^2.0.5
   share_plus: ^10.0.1
   geolocator: ^12.0.0
-  # webview_flutter: ^4.8.0 # Comentado para pausar la integración con Mercado Pago
+
+  # Mercado Pago integration
+  webview_flutter: ^4.8.0
+  http: ^1.2.0
+  flutter_secure_storage: ^9.2.2
 
   # Icons
   flutter_svg: ^2.0.10+1
+
+  # Splash screen
+  flutter_native_splash: ^2.4.0
 
 dev_dependencies:
   flutter_test:
@@ -88,9 +95,8 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/images/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -117,3 +123,33 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Flutter Native Splash Screen Configuration
+flutter_native_splash:
+  # Background color - using deep purple to match app theme
+  color: "#673AB7"
+  color_dark: "#512DA8"
+
+  # You can use an image for the splash screen
+  # image: assets/images/splash_logo.png
+
+  # Or use just text/icon with the background color
+  # For now using color only - can add custom logo later
+
+  # Android 12+ specific settings
+  android_12:
+    color: "#673AB7"
+    color_dark: "#512DA8"
+    # image: assets/images/splash_logo.png
+
+  # iOS specific settings
+  ios: true
+  android: true
+  web: false
+
+  # Remove splash screen after app is ready
+  android_gravity: center
+  ios_content_mode: center
+
+  # Fullscreen mode
+  fullscreen: true

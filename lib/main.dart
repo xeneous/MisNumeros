@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'firebase_options.dart';
 import 'config/supabase_config.dart';
 
@@ -18,23 +19,25 @@ import 'screens/free/free_area_screen.dart';
 import 'screens/premium/premium_area_screen.dart';
 import 'screens/movimientos/movimientos_screen.dart';
 import 'screens/home/settings_screen.dart';
-// import 'screens/integrations/mercado_pago_auth_screen.dart'; // Comentado para pausar la integración con Mercado Pago
+import 'screens/integrations/mercado_pago_auth_screen.dart';
+import 'screens/integrations/mercado_pago_settings_screen.dart';
+import 'screens/integrations/mercado_pago_payments_screen.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
+  // Preserve the splash screen while initializing
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
   // Inicializar Supabase
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
-  
+
   // Inicializar Firebase (temporal durante migración)
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
-  print('App starting...');
-  print('Supabase initialized: ${Supabase.instance.client.auth.currentUser != null ? "User logged in" : "No user"}');
-  
+
+
   runApp(const MyApp());
 }
 
@@ -76,8 +79,9 @@ class MyApp extends StatelessWidget {
               '/fixed-expenses': (context) => const FixedExpensesScreen(),
               '/movimientos': (context) => const MovimientosScreen(),
               '/settings': (context) => const SettingsScreen(),
-              // '/mercado-pago-auth': (context) =>
-              //     const MercadoPagoAuthScreen(), // Comentado para pausar la integración con Mercado Pago
+              '/mercado-pago-auth': (context) => const MercadoPagoAuthScreen(),
+              '/mercado-pago-settings': (context) => const MercadoPagoSettingsScreen(),
+              '/mercado-pago-payments': (context) => const MercadoPagoPaymentsScreen(),
             },
           ),
         ),
@@ -98,6 +102,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
+    // Remove splash screen after a small delay to ensure smooth transition
+    Future.delayed(const Duration(milliseconds: 500), () {
+      FlutterNativeSplash.remove();
+    });
   }
 
   @override

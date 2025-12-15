@@ -17,9 +17,7 @@ class SampleDataService {
       // In a real app, this would be tied to the authenticated user.
       const int sampleUserId = 1;
 
-      print('Sample data service disabled for Supabase');
     } catch (e) {
-      print('Error insertando datos de ejemplo: $e');
     }
   }
 
@@ -91,9 +89,7 @@ class SampleDataService {
         await _databaseService.insertCuenta(account);
       }
 
-      print('Cuentas por defecto creadas para usuario $userId');
     } catch (e) {
-      print('Error creando cuentas por defecto: $e');
       rethrow;
     }
   }
@@ -230,9 +226,7 @@ class SampleDataService {
         await _databaseService.insertCategoria(category);
       }
 
-      print('Categorías por defecto creadas para usuario $userId');
     } catch (e) {
-      print('Error creando categorías por defecto: $e');
       rethrow;
     }
   }

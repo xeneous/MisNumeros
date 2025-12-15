@@ -291,7 +291,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               .doc(currentUser.id)
               .update(updatedAppUser.toMap());
         } catch (e) {
-          print('Error updating Firestore: $e');
         }
 
         // 3. Go back to the previous screen (e.g., settings)

@@ -33,7 +33,6 @@ class SupabaseDatabaseService {
           .map((json) => Account.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting accounts: $e');
       rethrow;
     }
   }
@@ -52,7 +51,6 @@ class SupabaseDatabaseService {
 
       return Account.fromSupabase(response);
     } catch (e) {
-      print('Error getting account: $e');
       return null;
     }
   }
@@ -81,7 +79,6 @@ class SupabaseDatabaseService {
 
       return Account.fromSupabase(response);
     } catch (e) {
-      print('Error inserting account: $e');
       rethrow;
     }
   }
@@ -107,7 +104,6 @@ class SupabaseDatabaseService {
           .eq('id', account.id)
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error updating account: $e');
       rethrow;
     }
   }
@@ -123,7 +119,6 @@ class SupabaseDatabaseService {
           .eq('id', id)
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error deleting account: $e');
       rethrow;
     }
   }
@@ -142,7 +137,6 @@ class SupabaseDatabaseService {
 
       return (response as num?)?.toDouble() ?? 0.0;
     } catch (e) {
-      print('Error getting account balance: $e');
       return 0.0;
     }
   }
@@ -160,7 +154,6 @@ class SupabaseDatabaseService {
 
       return (response as num?)?.toDouble() ?? 0.0;
     } catch (e) {
-      print('Error getting available balance: $e');
       return 0.0;
     }
   }
@@ -178,7 +171,6 @@ class SupabaseDatabaseService {
 
       return (response as num?)?.toDouble() ?? 0.0;
     } catch (e) {
-      print('Error getting savings balance: $e');
       return 0.0;
     }
   }
@@ -197,7 +189,6 @@ class SupabaseDatabaseService {
           .map((json) => Account.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting accounts with calculated balances: $e');
       rethrow;
     }
   }
@@ -221,7 +212,6 @@ class SupabaseDatabaseService {
           .map((json) => CreditCard.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting credit cards: $e');
       rethrow;
     }
   }
@@ -246,7 +236,6 @@ class SupabaseDatabaseService {
 
       return CreditCard.fromSupabase(response);
     } catch (e) {
-      print('Error inserting credit card: $e');
       rethrow;
     }
   }
@@ -268,7 +257,6 @@ class SupabaseDatabaseService {
           .eq('id', card.id)
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error updating credit card: $e');
       rethrow;
     }
   }
@@ -284,7 +272,6 @@ class SupabaseDatabaseService {
           .eq('id', id)
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error deleting credit card: $e');
       rethrow;
     }
   }
@@ -310,7 +297,6 @@ class SupabaseDatabaseService {
         }
       }
     } catch (e) {
-      print('Error clearing other default accounts: $e');
       rethrow;
     }
   }
@@ -453,7 +439,6 @@ class SupabaseDatabaseService {
           .map((json) => Categoria.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting categories: $e');
       rethrow;
     }
   }
@@ -476,7 +461,6 @@ class SupabaseDatabaseService {
           .map((json) => Categoria.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting categories by type: $e');
       rethrow;
     }
   }
@@ -501,7 +485,6 @@ class SupabaseDatabaseService {
 
       return Categoria.fromSupabase(response);
     } catch (e) {
-      print('Error inserting category: $e');
       rethrow;
     }
   }
@@ -523,7 +506,6 @@ class SupabaseDatabaseService {
           .eq('id', category.idCategoria.toString())
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error updating category: $e');
       rethrow;
     }
   }
@@ -539,7 +521,6 @@ class SupabaseDatabaseService {
           .eq('id', id)
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error deleting category: $e');
       rethrow;
     }
   }
@@ -588,7 +569,6 @@ class SupabaseDatabaseService {
 
       return transactions;
     } catch (e) {
-      print('Error getting transactions: $e');
       rethrow;
     }
   }
@@ -609,7 +589,6 @@ class SupabaseDatabaseService {
           .map((json) => new_tx.Transaction.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting transactions by account: $e');
       rethrow;
     }
   }
@@ -636,7 +615,6 @@ class SupabaseDatabaseService {
 
       return transactions;
     } catch (e) {
-      print('Error getting transactions for account: $e');
       rethrow;
     }
   }
@@ -682,7 +660,6 @@ class SupabaseDatabaseService {
 
       return sorted.take(limit).map((e) => e.key).toList();
     } catch (e) {
-      print('Error getting top transaction descriptions: $e');
       return [];
     }
   }
@@ -713,7 +690,6 @@ class SupabaseDatabaseService {
 
       return new_tx.Transaction.fromSupabase(response);
     } catch (e) {
-      print('Error inserting transaction: $e');
       rethrow;
     }
   }
@@ -741,7 +717,6 @@ class SupabaseDatabaseService {
 
       // Balance is automatically recalculated by SQL functions - no manual update needed
     } catch (e) {
-      print('Error updating transaction: $e');
       rethrow;
     }
   }
@@ -760,7 +735,6 @@ class SupabaseDatabaseService {
 
       // Balance is automatically recalculated by SQL functions - no manual update needed
     } catch (e) {
-      print('Error deleting transaction: $e');
       rethrow;
     }
   }
@@ -789,7 +763,6 @@ class SupabaseDatabaseService {
           .map((json) => FixedExpense.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting fixed expenses: $e');
       rethrow;
     }
   }
@@ -843,7 +816,6 @@ class SupabaseDatabaseService {
 
       return FixedExpense.fromSupabase(response);
     } catch (e) {
-      print('Error inserting fixed expense: $e');
       rethrow;
     }
   }
@@ -893,7 +865,6 @@ class SupabaseDatabaseService {
           .eq('id', expense.id)
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error updating fixed expense: $e');
       rethrow;
     }
   }
@@ -909,7 +880,6 @@ class SupabaseDatabaseService {
           .eq('id', id)
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error deleting fixed expense: $e');
       rethrow;
     }
   }
@@ -980,7 +950,6 @@ class SupabaseDatabaseService {
 
       return SkippedPayment.fromSupabase(response);
     } catch (e) {
-      print('Error skipping payment: $e');
       rethrow;
     }
   }
@@ -1000,7 +969,6 @@ class SupabaseDatabaseService {
           .eq('skipped_date', date.toIso8601String().split('T')[0])
           .eq('user_id', currentUserId!);
     } catch (e) {
-      print('Error unskipping payment: $e');
       rethrow;
     }
   }
@@ -1023,7 +991,6 @@ class SupabaseDatabaseService {
 
       return response != null;
     } catch (e) {
-      print('Error checking if payment is skipped: $e');
       return false;
     }
   }
@@ -1050,7 +1017,6 @@ class SupabaseDatabaseService {
           .map((json) => SkippedPayment.fromSupabase(json))
           .toList();
     } catch (e) {
-      print('Error getting skipped payments: $e');
       rethrow;
     }
   }

@@ -85,7 +85,6 @@ class _FixedExpensesScreenState extends State<FixedExpensesScreen> {
           });
         }
       } catch (e) {
-        print('Error loading fixed expenses: $e');
         if (mounted) {
           setState(() {
             _isLoading = false;

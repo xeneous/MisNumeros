@@ -18,8 +18,9 @@ import '../../models/transaccion.dart' as tx; // Import old Transaccion model
 import '../../models/transaction.dart'
     as new_tx; // Import NEW Transaction model
 import '../../services/database_service.dart';
+import '../../services/mercado_pago_service.dart';
 import '../accounts/add_edit_account_screen.dart';
-import '../accounts/accounts_screen.dart';
+import '../accounts/account_transactions_screen.dart';
 import '../transactions/add_transaction_screen.dart';
 import '../fixed_expenses/add_edit_fixed_expense_screen.dart';
 
@@ -45,9 +46,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final DatabaseService dbService = DatabaseService();
+  final MercadoPagoService _mpService = MercadoPagoService();
   // Controla si se muestran los valores o asteriscos
   bool _showFinancialValues = true;
   bool _hasLoadedOnce = false;
+  bool _isMercadoPagoConnected = false;
 
   // Datos del home
   List<Account> _accounts = [];
@@ -89,6 +92,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadData();
+    _checkMercadoPagoConnection();
+  }
+
+  Future<void> _checkMercadoPagoConnection() async {
+    final isConnected = await _mpService.isConnected();
+    if (mounted) {
+      setState(() {
+        _isMercadoPagoConnected = isConnected;
+      });
+    }
   }
 
   @override
@@ -96,7 +109,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.didChangeDependencies();
     // Reload data when returning to this screen, but skip first load
     if (_hasLoadedOnce && mounted) {
-      print('HomeScreen: Returning to screen, reloading data');
       _loadData();
     }
     _hasLoadedOnce = true;
@@ -125,7 +137,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     // Reload data when app returns to foreground/resumed state
     if (state == AppLifecycleState.resumed) {
-      print('HomeScreen: App resumed, reloading data');
       _loadData();
     }
   }
@@ -152,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _loadData() async {
     if (!mounted) return;
-    print('HomeScreen: _loadData() called');
     setState(() => _isLoading = true);
 
     try {
@@ -176,46 +186,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (currentUser == null) throw Exception("Usuario no encontrado");
 
       // Fetch accounts first (needed for filtering)
-      print('HomeScreen: Fetching accounts for user ${currentUser.id}');
       final allAccounts = await dbService.getAccounts(currentUser.id);
-      print('HomeScreen: Found ${allAccounts.length} accounts');
 
       final accounts = _displayMode == 'all'
           ? allAccounts
           : allAccounts.where((acc) => acc.moneda == _activeCurrency).toList();
 
-      print(
-        'HomeScreen: Filtered to ${accounts.length} accounts for display mode $_displayMode',
-      );
-
       // Calculate balances and totals synchronously (no await needed)
       final balances = await _calculateBalances(accounts);
 
-      print('HomeScreen: Accounts purposes:');
-      for (var acc in accounts) {
-        print('  ${acc.name}: purpose=${acc.accountPurpose.name}, balance=${balances[acc.id]}');
-      }
-
       _totalBalancesByCurrency = _calculateTotalBalancesByCurrency(accounts, balances);
       _reserveBalancesByCurrency = _calculateReserveBalancesByCurrency(accounts, balances);
-
-      print('HomeScreen: Calculated balances: $balances');
-      print(
-        'HomeScreen: Total balances by currency: $_totalBalancesByCurrency',
-      );
-      print(
-        'HomeScreen: Reserve balances by currency: $_reserveBalancesByCurrency',
-      );
-      print('HomeScreen: Active currency: $_activeCurrency');
 
       // Fetch all other data in parallel
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
       final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
-
-      print(
-        'HomeScreen: Fetching data in parallel...',
-      );
 
       final results = await Future.wait([
         // Daily transactions
@@ -253,9 +239,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         skippedKeys.add('${skip.fixedExpenseId}_$dateStr');
       }
 
-      print('HomeScreen: Fetched ${dailyTransactions.length} daily transactions');
-      print('HomeScreen: Generated ${proximosGastos.length} próximos gastos from fixed expenses');
-
       // Calculate daily limit
       final dailyLimit = _calculateDailyLimit(
         _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
@@ -273,10 +256,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _topIncomeDescriptions = topIncomes;
           _skippedPaymentKeys = skippedKeys;
 
-          // Calculate projected end of month after we have all the data
-          _projectedEndOfMonthByCurrency = _calculateProjectedEndOfMonth();
-
-          print('HomeScreen: Projected end of month: $_projectedEndOfMonthByCurrency');
+          // Calculate theoretical end of month after we have all the data
+          _projectedEndOfMonthByCurrency = _calculateTheoreticalEndOfMonth();
 
           // Set default account for quick add form if not already set, inside setState
           if (accounts.isNotEmpty) {
@@ -362,10 +343,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         });
                       },
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () => _showOptionsMenu(context),
-                    ),
                   ],
                 ),
                 SliverToBoxAdapter(child: _buildFinancialContent(currentUser)),
@@ -415,23 +392,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
-          // Total Proyectado a Fin de Mes
-          _buildTitledAmountBox(
-            title: 'Proyectado Fin de Mes',
-            balances: _projectedEndOfMonthByCurrency,
-            color: _projectedEndOfMonthByCurrency[_activeCurrency] != null &&
-                    _projectedEndOfMonthByCurrency[_activeCurrency]! < 0
-                ? Colors.red[700]!
-                : Colors.green[700]!,
-            showTrendIcon: true,
-          ),
+          // Saldo teórico a fin de mes (sin recuadro)
+          _buildTheoreticalBalance(),
 
           const SizedBox(height: 16),
 
           // Cuentas/Billeteras - carrusel
           _buildAccountsCarousel(),
+
+          const SizedBox(height: 16),
+
+          // Acumulado de tarjetas de crédito
+          _buildCreditCardsAccumulated(),
 
           const SizedBox(height: 16),
 
@@ -445,6 +419,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
           const SizedBox(height: 80), // Espacio para el FloatingActionButton
         ],
+      ),
+    );
+  }
+
+  Widget _buildTheoreticalBalance() {
+    final theoreticalBalance = _projectedEndOfMonthByCurrency[_activeCurrency] ?? 0.0;
+    final isPositive = theoreticalBalance >= 0;
+    final color = isPositive ? Colors.green[700]! : Colors.red[700]!;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          _showFinancialValues
+              ? 'Saldo teórico fin de mes: ${_formatFinancialValue(theoreticalBalance)}'
+              : 'Saldo teórico fin de mes: ● ● ● ● ●',
+          style: TextStyle(
+            fontSize: 17.1, // 5% menos que 18
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
       ),
     );
   }
@@ -837,7 +834,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildAccountsCarousel() {
-    if (_accounts.isEmpty) {
+    // Filter to show only available accounts (not savings)
+    final availableAccounts = _accounts
+        .where((account) => account.accountPurpose == AccountPurpose.available)
+        .toList();
+
+    if (availableAccounts.isEmpty) {
       return Center(
         child: Column(
           children: [
@@ -848,7 +850,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 8),
             Text(
-              'No hay cuentas configuradas',
+              'No hay cuentas disponibles',
               style: TextStyle(color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
@@ -877,9 +879,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.zero,
-            itemCount: _accounts.length,
+            itemCount: availableAccounts.length,
             itemBuilder: (context, index) {
-              final cuenta = _accounts[index];
+              final cuenta = availableAccounts[index];
               final saldo = _accountBalances[cuenta.id] ?? 0.0;
               return SizedBox(
                 width: MediaQuery.of(context).size.width * 0.49, // Reduced 15% (0.58 * 0.85)
@@ -889,6 +891,108 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCreditCardsAccumulated() {
+    // Filter credit card accounts
+    final creditCards = _accounts
+        .where((account) => account.type == AccountType.credit)
+        .toList();
+
+    if (creditCards.isEmpty) {
+      return const SizedBox.shrink(); // Don't show anything if no credit cards
+    }
+
+    // Calculate total accumulated (negative balance means debt)
+    double totalAccumulated = 0;
+    for (var card in creditCards) {
+      final balance = _accountBalances[card.id] ?? 0.0;
+      // For credit cards, negative balance is debt
+      totalAccumulated += balance.abs();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.credit_card,
+                    color: Colors.orange[700],
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Tarjetas de Crédito',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${creditCards.length} ${creditCards.length == 1 ? 'tarjeta' : 'tarjetas'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange[700],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total acumulado',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                  ),
+                ),
+                Text(
+                  _showFinancialValues
+                      ? _formatFinancialValue(totalAccumulated)
+                      : '● ● ● ● ●',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1689,123 +1793,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _showAccountTransactions(Account account) async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final currentUser = authProvider.user;
-    if (currentUser == null) return;
-
-    try {
-      print(
-        'HomeScreen: Fetching transactions for account ${account.name} (${account.id})',
-      );
-
-      // Fetch transactions directly using the new Firestore-based system
-      final List<new_tx.Transaction> transactions = await dbService
-          .getTransactionsForAccount(
-            userId: currentUser.id,
-            accountId: account.id,
-            fromDate: DateTime(
-              DateTime.now().year,
-              DateTime.now().month,
-              DateTime.now().day,
-            ),
-            toDate: DateTime.now(),
-          );
-
-      print(
-        'HomeScreen: Found ${transactions.length} transactions for account ${account.name}',
-      );
-
-      if (!mounted) return;
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  void _showAccountTransactions(Account account) {
+    final balance = _accountBalances[account.id] ?? 0.0;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AccountTransactionsScreen(
+          account: account,
+          balance: balance,
         ),
-        builder: (context) {
-          return DraggableScrollableSheet(
-            expand: false,
-            initialChildSize: 0.6,
-            maxChildSize: 0.9,
-            minChildSize: 0.3,
-            builder: (context, scrollController) {
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Text(
-                      'Movimientos de ${account.name}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: transactions.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.receipt_long_outlined,
-                                  size: 64,
-                                  color: Colors.grey[400],
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No hay movimientos para esta cuenta hoy.',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Los movimientos aparecerán aquí cuando realices transacciones.',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[500],
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          )
-                        : _buildTransactionList(transactions, scrollController),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar movimientos: $e'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    }
+      ),
+    );
   }
 
   Widget _buildDailySummarySection() {
     double totalIngresos = 0;
     double totalEgresos = 0;
 
-    print(
-      'HomeScreen: _buildDailySummarySection - Processing ${_dailyTransactions.length} daily transactions',
-    );
 
     for (var transaction in _dailyTransactions) {
-      print(
-        'HomeScreen: Transaction - Type: ${transaction.type.name}, Amount: ${transaction.amount}, Description: ${transaction.description}',
-      );
 
       if (transaction.type == new_tx.TransactionType.income) {
         totalIngresos += transaction.amount;
@@ -1814,9 +1820,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     }
 
-    print(
-      'HomeScreen: Daily Summary - Total Ingresos: $totalIngresos, Total Egresos: $totalEgresos',
-    );
 
     return InkWell(
       onTap: () => _showDailyTransactionsDetail(),
@@ -2062,20 +2065,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return totals;
   }
 
-  Map<String, double> _calculateProjectedEndOfMonth() {
-    final Map<String, double> projected = {};
+  Map<String, double> _calculateTheoreticalEndOfMonth() {
+    final Map<String, double> theoretical = {};
 
-    // Start with available + reserve
+    // Start with available balance only (no savings/reserves)
     _totalBalancesByCurrency.forEach((currency, availableBalance) {
-      projected[currency] = availableBalance;
-    });
-
-    _reserveBalancesByCurrency.forEach((currency, reserveBalance) {
-      projected.update(
-        currency,
-        (value) => value + reserveBalance,
-        ifAbsent: () => reserveBalance,
-      );
+      theoretical[currency] = availableBalance;
     });
 
     // Subtract pending fixed expenses until end of month
@@ -2099,17 +2094,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (gasto.fechaVencimiento.isAfter(endOfMonth)) continue;
 
       // Determine currency - assume ARS for local mode, USD for travel mode
-      // This is a simplification - ideally we'd get currency from the account
       final currency = _activeCurrency;
 
-      projected.update(
+      theoretical.update(
         currency,
         (value) => value - gasto.montoEstimado,
         ifAbsent: () => -gasto.montoEstimado,
       );
     }
 
-    return projected;
+    return theoretical;
   }
 
   Widget _buildQuickTransactionForm() {
@@ -2618,7 +2612,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // Prevent double-clicks
     if (_isSavingQuickTransaction) return;
 
-    print('HomeScreen: _saveQuickTransaction() called');
     setState(() => _isSavingQuickTransaction = true);
 
     try {
@@ -2630,9 +2623,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final location = await _getCurrentLocation();
 
       final amount = double.parse(_quickAddAmountController.text);
-      print(
-        'HomeScreen: Creating transaction - Amount: $amount, Account: ${_quickAddSelectedAccount!.id}',
-      );
 
       // --- NEW MODEL IMPLEMENTATION ---
       // Create a new transaction using the Firestore-compatible model
@@ -2664,12 +2654,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         updatedAt: DateTime.now(),
       );
 
-      print('HomeScreen: Saving transaction to database...');
       // 1. Save the new transaction to Firestore
       await dbService.insertNewTransaction(newTransaction);
-      print('HomeScreen: Transaction saved successfully');
 
-      print('HomeScreen: Updating local UI state...');
       // 2. Update local state without a full reload to avoid screen flickering
       final accountIndex = _accounts.indexWhere(
         (acc) => acc.id == newTransaction.accountId,
@@ -2680,9 +2667,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           newTransaction.accountId!,
         );
         if (updatedAccount != null) {
-          print(
-            'HomeScreen: Found updated account, new balance from DB: ${updatedAccount.currentBalance}',
-          );
 
           // Update the specific account in the list with the database value
           _accounts[accountIndex] = updatedAccount;
@@ -2697,26 +2681,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             _totalBalancesByCurrency[_activeCurrency] ?? 0.0,
           );
 
-          print('HomeScreen: Updated account balances: $_accountBalances');
-          print(
-            'HomeScreen: Updated total balances: $_totalBalancesByCurrency',
-          );
         } else {
-          print(
-            'HomeScreen: ERROR - Could not fetch updated account from database',
-          );
         }
       } else {
-        print(
-          'HomeScreen: ERROR - Account not found in local list: ${newTransaction.accountId}',
-        );
       }
 
       // Add the new transaction to the daily list
       _dailyTransactions.insert(0, newTransaction);
-      print(
-        'HomeScreen: Added transaction to daily list, total daily transactions: ${_dailyTransactions.length}',
-      );
 
       // 3. Reset form and trigger a single UI update
       setState(() {
@@ -2732,9 +2703,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // The state variables for balances are already updated above
       });
 
-      print('HomeScreen: UI state updated successfully');
     } catch (e) {
-      print('HomeScreen: ERROR saving transaction: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al guardar: $e'),
@@ -2775,13 +2744,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final position = await Geolocator.getCurrentPosition();
       return '${position.latitude},${position.longitude}';
     } catch (e) {
-      print('Error getting location: $e');
       return null;
     }
   }
 
   void _showAddTransactionSheet() async {
-    print('HomeScreen: Opening AddTransactionScreen sheet');
 
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -2795,13 +2762,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
 
-    print('HomeScreen: AddTransactionScreen closed with result: $result');
 
     // Refresca los datos solo si la transacción fue exitosa
     if (result == true) {
-      print('HomeScreen: Transaction was successful, reloading data...');
       await _loadData();
-      print('HomeScreen: Data reloaded successfully');
     }
   }
 
@@ -3131,7 +3095,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // Fetch all balances in parallel for better performance
     final balancesFutures = accounts.map((account) async {
       final calculatedBalance = await dbService.getAccountBalance(account.id);
-      print('HomeScreen: Calculated balance for ${account.name}: $calculatedBalance');
       return MapEntry(account.id, calculatedBalance);
     }).toList();
 
@@ -3500,103 +3463,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showOptionsMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        // Modern look without rounded corners on top
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Opciones',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: const Icon(
-                Icons.account_balance_wallet,
-                color: Colors.blue,
-              ),
-              title: const Text('Cuentas'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context)
-                    .push(
-                      MaterialPageRoute(
-                        builder: (context) => const AccountsScreen(),
-                      ),
-                    )
-                    .then((_) => _loadData());
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.category, color: Colors.green),
-              title: const Text('Categorías'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).pushNamed('/categories');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.contacts, color: Colors.orange),
-              title: const Text('Contactos'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).pushNamed('/contacts');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.analytics, color: Colors.purple),
-              title: const Text('Análisis Anual'),
-              onTap: () {
-                Navigator.pop(context);
-                _showAnnualizationDialog(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.import_export, color: Colors.teal),
-              title: const Text('Exportar Movimientos'),
-              onTap: () {
-                Navigator.pop(context);
-                _exportTransactionsToCsv();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings, color: Colors.grey),
-              title: const Text('Configuración'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(
-                  context,
-                ).pushNamed('/settings').then((_) => _loadData());
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text(
-                'Cerrar Sesión',
-                style: TextStyle(color: Colors.red),
-              ),
-              onTap: () async {
-                Navigator.pop(context); // Close the modal
-                await Provider.of<AuthProvider>(
-                  context,
-                  listen: false,
-                ).signOut();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildMasterDataDrawer() {
     return Drawer(
       child: Container(
@@ -3737,6 +3603,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         onTap: () {
                           Navigator.pop(context);
                           Navigator.of(context).pushNamed('/statistics');
+                        },
+                      ),
+                      const Divider(height: 32),
+                      const Text(
+                        'Herramientas',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_isMercadoPagoConnected)
+                        _buildDrawerItem(
+                          icon: Icons.account_balance_wallet,
+                          title: 'Mercado Pago',
+                          subtitle: 'Ver y sincronizar pagos',
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.of(context)
+                                .pushNamed('/mercado-pago-payments')
+                                .then((_) => _loadData());
+                          },
+                        ),
+                      _buildDrawerItem(
+                        icon: Icons.import_export,
+                        title: 'Exportar Movimientos',
+                        subtitle: 'Descargar transacciones en CSV',
+                        onTap: () {
+                          Navigator.pop(context);
+                          _exportTransactionsToCsv();
+                        },
+                      ),
+                      _buildDrawerItem(
+                        icon: Icons.settings,
+                        title: 'Configuración',
+                        subtitle: 'Ajustes de la aplicación',
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context)
+                              .pushNamed('/settings')
+                              .then((_) {
+                            _loadData();
+                            _checkMercadoPagoConnection();
+                          });
                         },
                       ),
                       const Divider(height: 32),

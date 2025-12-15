@@ -48,7 +48,6 @@ class AuthProvider with ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error loading user: $e');
     }
   }
 
@@ -68,7 +67,6 @@ class AuthProvider with ChangeNotifier {
       
       _isInitialized = true;
     } catch (e) {
-      print('Initialization error: $e');
       _error = 'Error al inicializar: $e';
     } finally {
       _isLoading = false;
@@ -179,7 +177,6 @@ class AuthProvider with ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error reloading user: $e');
     }
   }
 

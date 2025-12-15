@@ -256,7 +256,6 @@ class DatabaseService {
       try {
         await db.execute('ALTER TABLE $cuentasTable ADD COLUMN user_id TEXT');
       } catch (e) {
-        print('user_id column already exists in $cuentasTable or error: $e');
       }
 
       try {
@@ -264,7 +263,6 @@ class DatabaseService {
           'ALTER TABLE $categoriasTable ADD COLUMN user_id TEXT',
         );
       } catch (e) {
-        print('user_id column already exists in $categoriasTable or error: $e');
       }
 
       try {
@@ -272,9 +270,6 @@ class DatabaseService {
           'ALTER TABLE $transaccionesTable ADD COLUMN user_id TEXT',
         );
       } catch (e) {
-        print(
-          'user_id column already exists in $transaccionesTable or error: $e',
-        );
       }
 
       try {
@@ -282,15 +277,11 @@ class DatabaseService {
           'ALTER TABLE $gastosFijosTable ADD COLUMN user_id TEXT',
         );
       } catch (e) {
-        print(
-          'user_id column already exists in $gastosFijosTable or error: $e',
-        );
       }
 
       try {
         await db.execute('ALTER TABLE $contactosTable ADD COLUMN user_id TEXT');
       } catch (e) {
-        print('user_id column already exists in $contactosTable or error: $e');
       }
 
       // Note: Data migration will be handled at runtime when users log in
@@ -453,7 +444,6 @@ class DatabaseService {
         return app_user.User.fromMap(data..['id'] = uid);
       }
     } catch (e) {
-      print('Error getting user from Firestore: $e');
     }
     return null;
   }
@@ -533,9 +523,6 @@ class DatabaseService {
     try {
       // Only migrate if oldUserId is valid (> 0)
       if (oldUserId <= 0) {
-        print(
-          'Skipping migration - no valid old user ID (oldUserId: $oldUserId)',
-        );
         return;
       }
 
@@ -558,22 +545,13 @@ class DatabaseService {
               where: 'id_usuario = ? AND (user_id IS NULL OR user_id = "")',
               whereArgs: [oldUserId],
             );
-            print(
-              'Migrated $tableName from user ID $oldUserId to Firebase UID $firebaseUID',
-            );
           } else {
-            print(
-              'Skipping $tableName - no id_usuario column (new installation)',
-            );
           }
         } catch (e) {
-          print('Error migrating table $tableName: $e');
         }
       }
 
-      print('Migration completed for Firebase UID $firebaseUID');
     } catch (e) {
-      print('Error in migration process: $e');
     }
   }
 
@@ -678,9 +656,7 @@ class DatabaseService {
           .collection('accounts')
           .doc(account.id)
           .set(account.toMap());
-      print('DatabaseService: Account saved to Firestore: ${account.name}');
     } catch (e) {
-      print('DatabaseService: Error saving account to Firestore: $e');
     }
 
     // Use REPLACE to avoid primary key constraint errors
@@ -704,9 +680,6 @@ class DatabaseService {
             .map((doc) => Account.fromMap(doc.data()))
             .toList();
 
-        print(
-          'DatabaseService: Found ${firestoreAccounts.length} accounts in Firestore',
-        );
 
         // Sync Firestore accounts to local SQLite
         await _syncAccountsToLocal(firestoreAccounts);
@@ -714,7 +687,6 @@ class DatabaseService {
         return firestoreAccounts;
       }
     } catch (e) {
-      print('DatabaseService: Error fetching accounts from Firestore: $e');
     }
 
     // Fallback to local SQLite if Firestore fails
@@ -727,9 +699,6 @@ class DatabaseService {
     );
 
     final localAccounts = maps.map((map) => Account.fromMap(map)).toList();
-    print(
-      'DatabaseService: Found ${localAccounts.length} accounts in local SQLite',
-    );
 
     return localAccounts;
   }
@@ -757,9 +726,7 @@ class DatabaseService {
           .collection('accounts')
           .doc(account.id)
           .set(account.toMap(), firestore.SetOptions(merge: true));
-      print('DatabaseService: Account updated in Firestore: ${account.name}');
     } catch (e) {
-      print('DatabaseService: Error updating account in Firestore: $e');
     }
 
     return await db.update(
@@ -972,9 +939,6 @@ class DatabaseService {
 
   // New transaction operations (using new_tx.Transaction model)
   Future<void> insertNewTransaction(new_tx.Transaction transaction) async {
-    print(
-      'DatabaseService: Saving transaction to Firestore - ID: ${transaction.id}, Amount: ${transaction.amount}, Account: ${transaction.accountId}',
-    );
 
     // --- NEW: Save directly to Firestore ---
     await _firestore
@@ -982,20 +946,15 @@ class DatabaseService {
         .doc(transaction.id)
         .set(transaction.toMap());
 
-    print('DatabaseService: Transaction saved to Firestore successfully');
 
     // After inserting, update the balance of the corresponding new Account
     // This logic remains crucial.
     if (transaction.accountId != null && transaction.accountId!.isNotEmpty) {
-      print(
-        'DatabaseService: Updating account balance for account ${transaction.accountId}',
-      );
       await updateAccountBalance(
         transaction.accountId!,
         transaction.amount,
         _mapNewToOldTransactionType(transaction.type),
       );
-      print('DatabaseService: Account balance updated successfully');
     }
   }
 
@@ -1004,19 +963,14 @@ class DatabaseService {
     double amount,
     TipoTransaccion type,
   ) async {
-    print(
-      'DatabaseService: updateAccountBalance called - AccountID: $accountId, Amount: $amount, Type: ${type.name}',
-    );
 
     final account = await getAccount(accountId);
     if (account != null) {
-      print('DatabaseService: Current balance: ${account.currentBalance}');
 
       final newBalance = type == TipoTransaccion.ingreso
           ? (account.currentBalance + amount)
           : (account.currentBalance - amount);
 
-      print('DatabaseService: New balance will be: $newBalance');
 
       final updatedAccount = account.copyWith(
         currentBalance: newBalance,
@@ -1024,9 +978,7 @@ class DatabaseService {
       );
 
       await updateAccount(updatedAccount);
-      print('DatabaseService: Account balance updated in database');
     } else {
-      print('DatabaseService: ERROR - Account not found with ID: $accountId');
     }
   }
 
@@ -1053,18 +1005,12 @@ class DatabaseService {
       final validAccounts = await getAccounts(userId);
       final validAccountIds = validAccounts.map((a) => a.id).toSet();
 
-      print(
-        'DatabaseService: Found ${transactions.length} total transactions, ${validAccountIds.length} valid accounts',
-      );
 
       // Filter out transactions for accounts that no longer exist
       transactions = transactions.where((tx) {
         final isValidAccount =
             tx.accountId != null && validAccountIds.contains(tx.accountId);
         if (!isValidAccount) {
-          print(
-            'DatabaseService: Filtering out transaction for non-existent account: ${tx.accountId}',
-          );
         }
         return isValidAccount;
       }).toList();
@@ -1081,12 +1027,8 @@ class DatabaseService {
       // Sort by date in memory
       transactions.sort((a, b) => b.date.compareTo(a.date));
 
-      print(
-        'DatabaseService: Returning ${transactions.length} valid transactions',
-      );
       return transactions;
     } catch (e) {
-      print('Error fetching transactions from Firestore: $e');
       return [];
     }
   }
@@ -1114,9 +1056,6 @@ class DatabaseService {
       // Verify the account still exists before returning transactions
       final account = await getAccount(accountId);
       if (account == null) {
-        print(
-          'DatabaseService: Account $accountId no longer exists, returning empty list',
-        );
         return [];
       }
 
@@ -1131,12 +1070,8 @@ class DatabaseService {
       // Sort by date in memory
       transactions.sort((a, b) => b.date.compareTo(a.date));
 
-      print(
-        'DatabaseService: Returning ${transactions.length} transactions for account $accountId',
-      );
       return transactions;
     } catch (e) {
-      print('Error fetching transactions from Firestore: $e');
       return [];
     }
   }
@@ -1166,11 +1101,9 @@ class DatabaseService {
 
   Future<List<GastoFijo>> getGastosFijos(String userId) async {
     final db = await database;
-    print('DatabaseService: getGastosFijos called for userId: $userId');
 
     // Use cached schema info to avoid repeated PRAGMA queries
     final hasOldColumn = await _hasOldUserIdColumn(db, gastosFijosTable);
-    print('DatabaseService: hasOldColumn = $hasOldColumn');
 
     String whereClause = 'user_id = ?';
     List<dynamic> whereArgs = [userId];
@@ -1187,9 +1120,7 @@ class DatabaseService {
       orderBy: 'fecha_inicio DESC',
     );
 
-    print('DatabaseService: Found ${maps.length} gastos fijos');
     final gastos = maps.map((map) => GastoFijo.fromMap(map)).toList();
-    print('DatabaseService: Converted to ${gastos.length} GastoFijo objects');
     return gastos;
   }
 
@@ -1229,24 +1160,14 @@ class DatabaseService {
   // New FixedExpense operations (bridge to GastoFijo)
   Future<void> insertFixedExpenseNew(FixedExpense fixedExpense) async {
     try {
-      print(
-        'DatabaseService: Starting to insert fixed expense: ${fixedExpense.name}',
-      );
 
       // Convert FixedExpense to GastoFijo for database storage
       final gastoFijo = await _convertFixedExpenseToGastoFijo(fixedExpense);
 
-      print(
-        'DatabaseService: Converted to GastoFijo - Account ID: ${gastoFijo.idCuenta}, Category ID: ${gastoFijo.idCategoria}',
-      );
 
       final result = await insertGastoFijo(gastoFijo);
 
-      print(
-        'DatabaseService: Fixed expense inserted successfully with ID: $result',
-      );
     } catch (e) {
-      print('DatabaseService: Error inserting fixed expense: $e');
       rethrow;
     }
   }
@@ -1307,12 +1228,8 @@ class DatabaseService {
       idGasto = int.parse(fixedExpense.id);
     } catch (e) {
       // If parsing fails, it's a UUID (new expense), so keep idGasto as 0
-      print('DatabaseService: fixedExpense.id is not numeric (${fixedExpense.id}), treating as new expense');
     }
 
-    print(
-      'DatabaseService: Converting FixedExpense to GastoFijo - ID: $idGasto, Account UUID: ${fixedExpense.accountId}, Account ID: $accountId, Category ID: $categoryId',
-    );
 
     return GastoFijo(
       idGasto: idGasto, // Use existing ID for updates, 0 for new expenses
@@ -1365,7 +1282,6 @@ class DatabaseService {
         lastPaymentDate: null,
       );
     } catch (e) {
-      print('Error converting GastoFijo to FixedExpense: $e');
       return null;
     }
   }
@@ -1395,10 +1311,8 @@ class DatabaseService {
       );
 
       final accountId = await insertCuenta(defaultAccount);
-      print('DatabaseService: Created default account with ID: $accountId');
       return accountId;
     } catch (e) {
-      print('DatabaseService: Error ensuring default account: $e');
       return 1; // Fallback to ID 1
     }
   }
@@ -1426,10 +1340,8 @@ class DatabaseService {
       );
 
       final categoryId = await insertCategoria(defaultCategory);
-      print('DatabaseService: Created default category with ID: $categoryId');
       return categoryId;
     } catch (e) {
-      print('DatabaseService: Error ensuring default category: $e');
       return 1; // Fallback to ID 1
     }
   }
@@ -1721,7 +1633,6 @@ class DatabaseService {
           csvFiles[table] = utf8.encode(csvContent);
         }
       } catch (e) {
-        print('Could not export table $table: $e');
       }
     }
 
@@ -1762,11 +1673,7 @@ class DatabaseService {
           conflictAlgorithm: sql.ConflictAlgorithm.replace,
         );
       }
-      print(
-        'DatabaseService: Synced ${accounts.length} accounts to local SQLite',
-      );
     } catch (e) {
-      print('DatabaseService: Error syncing accounts to local: $e');
     }
   }
 
@@ -1782,11 +1689,7 @@ class DatabaseService {
           conflictAlgorithm: sql.ConflictAlgorithm.replace,
         );
       }
-      print(
-        'DatabaseService: Synced ${expenses.length} fixed expenses to local SQLite',
-      );
     } catch (e) {
-      print('DatabaseService: Error syncing fixed expenses to local: $e');
     }
   }
 }
