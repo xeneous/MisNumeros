@@ -396,6 +396,72 @@ class MercadoPagoService {
     }
   }
 
+  /// Sincroniza pagos específicos de Mercado Pago con las transacciones locales
+  Future<int> syncSpecificPayments({
+    required List<Map<String, dynamic>> payments,
+    String? defaultAccountId,
+    String appUserId = '',
+  }) async {
+    if (!await isConnected()) return 0;
+
+    try {
+      if (payments.isEmpty) return 0;
+
+      // Obtener o crear cuenta de Mercado Pago
+      final accounts = await _dbService.getAccounts();
+
+      Account? mpAccount;
+      if (defaultAccountId != null) {
+        mpAccount = accounts.firstWhere(
+          (acc) => acc.id == defaultAccountId,
+          orElse: () => accounts.first,
+        );
+      }
+
+      // Si no hay cuenta específica, buscar una cuenta digital para MP
+      if (mpAccount == null) {
+        mpAccount = accounts.firstWhere(
+          (acc) => acc.name.toLowerCase().contains('mercado pago') ||
+                   acc.name.toLowerCase().contains('mercadopago'),
+          orElse: () => accounts.firstWhere(
+            (acc) => acc.type == AccountType.digital,
+            orElse: () => accounts.first,
+          ),
+        );
+      }
+
+      int syncedCount = 0;
+
+      for (final payment in payments) {
+        // Verificar si ya existe una transacción con este payment_id
+        final existingTransactions = await _dbService.getTransactions();
+        final alreadyExists = existingTransactions.any(
+          (t) => t.description?.contains('MP#${payment['id']}') ?? false,
+        );
+
+        if (!alreadyExists) {
+          // Crear transacción desde el pago
+          final transaction = _mapPaymentToTransaction(
+            payment,
+            mpAccount.id,
+            appUserId,
+          );
+
+          await _dbService.insertTransaction(transaction);
+          syncedCount++;
+        }
+      }
+
+      // Actualizar última fecha de sincronización
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastSyncKey, DateTime.now().toIso8601String());
+
+      return syncedCount;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   /// Mapea un pago de Mercado Pago a una transacción local
   Transaction _mapPaymentToTransaction(
     Map<String, dynamic> payment,

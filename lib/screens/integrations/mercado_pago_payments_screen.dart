@@ -17,6 +17,7 @@ class MercadoPagoPaymentsScreen extends StatefulWidget {
 class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
   final _mpService = MercadoPagoService();
   List<Map<String, dynamic>> _payments = [];
+  Set<int> _selectedPaymentIds = {}; // IDs de pagos seleccionados
   bool _isLoading = true;
   bool _isSyncing = false;
   DateTime _selectedDate = DateTime.now();
@@ -46,6 +47,10 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
       setState(() {
         _payments = payments;
         _isLoading = false;
+        // Marcar todos los pagos como seleccionados por defecto
+        _selectedPaymentIds = payments
+            .map((p) => p['id'] as int)
+            .toSet();
       });
     } catch (e) {
       setState(() => _isLoading = false);
@@ -74,8 +79,8 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
     }
   }
 
-  Future<void> _syncAllPayments() async {
-    if (_isSyncing) return;
+  Future<void> _syncSelectedPayments() async {
+    if (_isSyncing || _selectedPaymentIds.isEmpty) return;
 
     setState(() => _isSyncing = true);
 
@@ -83,7 +88,13 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final userId = authProvider.user?.id ?? '';
 
-      final syncedCount = await _mpService.syncPaymentsToTransactions(
+      // Filtrar solo los pagos seleccionados
+      final selectedPayments = _payments
+          .where((p) => _selectedPaymentIds.contains(p['id'] as int))
+          .toList();
+
+      final syncedCount = await _mpService.syncSpecificPayments(
+        payments: selectedPayments,
         appUserId: userId,
       );
 
@@ -165,6 +176,30 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
         title: const Text('Pagos de Mercado Pago'),
         elevation: 0,
         actions: [
+          if (_payments.isNotEmpty)
+            IconButton(
+              icon: Icon(
+                _selectedPaymentIds.length == _payments.length
+                    ? Icons.check_box
+                    : Icons.check_box_outline_blank,
+              ),
+              onPressed: () {
+                setState(() {
+                  if (_selectedPaymentIds.length == _payments.length) {
+                    // Deseleccionar todos
+                    _selectedPaymentIds.clear();
+                  } else {
+                    // Seleccionar todos
+                    _selectedPaymentIds = _payments
+                        .map((p) => p['id'] as int)
+                        .toSet();
+                  }
+                });
+              },
+              tooltip: _selectedPaymentIds.length == _payments.length
+                  ? 'Deseleccionar todos'
+                  : 'Seleccionar todos',
+            ),
           IconButton(
             icon: const Icon(Icons.calendar_today),
             onPressed: _selectDate,
@@ -268,7 +303,9 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
                 ],
               ),
               child: ElevatedButton.icon(
-                onPressed: _isSyncing ? null : _syncAllPayments,
+                onPressed: _isSyncing || _selectedPaymentIds.isEmpty
+                    ? null
+                    : _syncSelectedPayments,
                 icon: _isSyncing
                     ? const SizedBox(
                         width: 20,
@@ -281,7 +318,9 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
                       )
                     : const Icon(Icons.sync),
                 label: Text(
-                  _isSyncing ? 'Sincronizando...' : 'Sincronizar Todos',
+                  _isSyncing
+                      ? 'Sincronizando...'
+                      : 'Sincronizar ${_selectedPaymentIds.length} pago(s)',
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green[700],
@@ -305,48 +344,96 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
     final dateCreated = DateTime.parse(payment['date_created']);
     final paymentMethod = payment['payment_type_id'] ?? 'Desconocido';
     final status = payment['status'] ?? 'Desconocido';
+    final paymentId = payment['id'] as int;
 
     final isIncome = amount >= 0;
     final color = _getPaymentColor(payment);
     final icon = _getPaymentIcon(payment);
     final type = _getPaymentType(payment);
+    final isSelected = _selectedPaymentIds.contains(paymentId);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (isSelected) {
+              _selectedPaymentIds.remove(paymentId);
+            } else {
+              _selectedPaymentIds.add(paymentId);
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (bool? value) {
+                      setState(() {
+                        if (value == true) {
+                          _selectedPaymentIds.add(paymentId);
+                        } else {
+                          _selectedPaymentIds.remove(paymentId);
+                        }
+                      });
+                    },
+                    activeColor: Colors.deepPurple,
                   ),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          description,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          type,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        description,
-                        style: const TextStyle(
+                        '${isIncome ? '+' : '-'} \$${amount.abs().toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          color: color,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        type,
+                        DateFormat('HH:mm').format(dateCreated),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -354,66 +441,45 @@ class _MercadoPagoPaymentsScreenState extends State<MercadoPagoPaymentsScreen> {
                       ),
                     ],
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${isIncome ? '+' : '-'} \$${amount.abs().toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      DateFormat('HH:mm').format(dateCreated),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.payment, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text(
-                  _formatPaymentMethod(paymentMethod),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(status).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _formatStatus(status),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.payment, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatPaymentMethod(paymentMethod),
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: _getStatusColor(status),
+                      fontSize: 12,
+                      color: Colors.grey[600],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(status).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _formatStatus(status),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _getStatusColor(status),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
