@@ -51,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _showFinancialValues = true;
   bool _hasLoadedOnce = false;
   bool _isMercadoPagoConnected = false;
+  bool _hasAutoSyncedThisSession = false;
 
   // Datos del home
   List<Account> _accounts = [];
@@ -267,6 +268,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }
         });
       }
+
+      // Sincronización automática de Mercado Pago (en segundo plano, sin bloquear)
+      // Solo sincronizar una vez por sesión para evitar loops
+      if (_isMercadoPagoConnected && !_hasAutoSyncedThisSession) {
+        _hasAutoSyncedThisSession = true;
+        _autoSyncMercadoPago();
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -274,6 +282,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           context,
         ).showSnackBar(SnackBar(content: Text('Error al cargar datos: $e')));
       }
+    }
+  }
+
+  Future<void> _autoSyncMercadoPago() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final userId = authProvider.user?.id ?? '';
+
+      final syncedCount = await _mpService.syncPaymentsToTransactions(
+        appUserId: userId,
+      );
+
+      // Solo mostrar notificación si se sincronizaron pagos nuevos
+      if (syncedCount > 0 && mounted) {
+        // Actualizar solo las transacciones del día sin recargar todo
+        final today = DateTime.now();
+        final startOfDay = DateTime(today.year, today.month, today.day, 0, 0, 0);
+        final endOfDay = DateTime(today.year, today.month, today.day, 23, 59, 59);
+
+        final dailyTransactions = await dbService.getTransactions(
+          userId: userId,
+          fromDate: startOfDay,
+          toDate: endOfDay,
+        );
+
+        if (mounted) {
+          setState(() {
+            _dailyTransactions = dailyTransactions;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ $syncedCount pago(s) de Mercado Pago sincronizado(s)'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Fallar silenciosamente para no interrumpir la experiencia del usuario
+      print('Error en sincronización automática de MP: $e');
     }
   }
 
